@@ -439,8 +439,12 @@ var memCreate = &Op{
 		if err != nil {
 			return nil, err
 		}
+		principal, err := e.principalHref(ctx, uid)
+		if err != nil {
+			return nil, err
+		}
 		body := map[string]any{"_links": map[string]any{
-			"project": hal.Ref(href("projects", pid)), "principal": hal.Ref(href("principals", uid)), "roles": roles,
+			"project": hal.Ref(href("projects", pid)), "principal": hal.Ref(principal), "roles": roles,
 		}}
 		if m := a.String("message"); m != "" {
 			body["_meta"] = map[string]any{"notificationMessage": hal.Text(m), "sendNotifications": true}
@@ -474,6 +478,20 @@ var memUpdate = &Op{
 		}
 		return hal.Flatten(res), nil
 	},
+}
+
+// principalHref returns the typed href (users, groups or placeholder_users)
+// that membership payloads require; /principals/:id is rejected.
+func (e *Env) principalHref(ctx context.Context, id int) (string, error) {
+	var lastErr error
+	for _, kind := range []string{"users", "groups", "placeholder_users"} {
+		_, err := e.C.Get(ctx, href(kind, id)[len("/api/v3"):], nil)
+		if err == nil {
+			return href(kind, id), nil
+		}
+		lastErr = err
+	}
+	return "", fmt.Errorf("principal %d not found: %w", id, lastErr)
 }
 
 func (e *Env) roleRefs(ctx context.Context, refs []string) ([]any, error) {

@@ -29,6 +29,9 @@ today, yesterday, week (this Monday), month (1st of this month) or -Nd.`,
 type TimeList struct {
 	List
 	TotalHours float64 `json:"totalHours"`
+	// Entries is the number of time entries summed (differs from Count
+	// when the items are groups).
+	Entries int `json:"entries"`
 }
 
 var (
@@ -103,10 +106,11 @@ var timeList = &Op{
 			h, _ := hal.ParseHours(fmt.Sprint(it["hours"]))
 			total += h
 		}
-		tl := &TimeList{List: *l, TotalHours: round2(total)}
+		tl := &TimeList{List: *l, TotalHours: round2(total), Entries: len(l.Items)}
 		if g := a.String("group_by"); g != "" {
 			tl.Items = groupHours(l.Items, g)
 			tl.Count = len(tl.Items)
+			tl.Total = tl.Count
 		}
 		return tl, nil
 	},
@@ -119,7 +123,7 @@ var timeList = &Op{
 		if err := renderTable(w, &tl.List, cols); err != nil {
 			return err
 		}
-		_, err := fmt.Fprintf(w, "\nTotal: %sh in %d entries\n", hal.String(tl.TotalHours), tl.Total)
+		_, err := fmt.Fprintf(w, "\nTotal: %sh in %d entries\n", hal.String(tl.TotalHours), tl.Entries)
 		return err
 	},
 }

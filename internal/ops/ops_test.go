@@ -176,6 +176,8 @@ func (f *fakeOP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.bodies = append(f.bodies, body)
 	w.Header().Set("Content-Type", "application/hal+json")
 	switch {
+	case r.URL.Path == "/api/v3/groups/5":
+		_, _ = w.Write([]byte(`{"_type":"Group","id":5,"name":"Devs"}`))
 	case r.URL.Path == "/api/v3/statuses":
 		_, _ = w.Write([]byte(`{"_type":"Collection","total":2,"count":2,"_embedded":{"elements":[{"id":1,"name":"New"},{"id":7,"name":"In progress"}]}}`))
 	case r.URL.Path == "/api/v3/work_packages/42" && r.Method == "GET":
@@ -268,5 +270,17 @@ func TestReadOnlyAPIRequest(t *testing.T) {
 	_, err := ByTool("op_api_request").Execute(context.Background(), env, Args{"method": "DELETE", "path": "work_packages/1"})
 	if err == nil || !strings.Contains(err.Error(), "read-only") {
 		t.Errorf("expected read-only refusal, got %v", err)
+	}
+}
+
+// Memberships need the typed principal href; /principals/:id is rejected.
+func TestPrincipalHref(t *testing.T) {
+	env, _ := newTestEnv(t)
+	h, err := env.principalHref(context.Background(), 5)
+	if err != nil || h != "/api/v3/groups/5" {
+		t.Errorf("principalHref(5) = %q, %v; want /api/v3/groups/5", h, err)
+	}
+	if _, err := env.principalHref(context.Background(), 404); err == nil {
+		t.Error("expected error for unknown principal")
 	}
 }
