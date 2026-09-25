@@ -1,0 +1,14 @@
+# Binaries
+/opcli
+/dist/
+*.exe
+
+# Secrets and local config
+secret.txt
+.env
+.openproject.yaml
+
+# Local developer environment
+.claude/settings.local.json
+.task/
+.tmuxp.yaml

@@ -1,0 +1,56 @@
+version: "3"
+
+vars:
+  BINARY: opcli{{if eq OS "windows"}}.exe{{end}}
+  INSTALL_DIR: '{{if eq OS "windows"}}{{.HOME}}/bin{{else}}{{.HOME}}/.local/bin{{end}}'
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  build:
+    desc: Build the opcli binary
+    cmds:
+      - go build -ldflags "-X main.version={{.VERSION}}" -o {{.BINARY}} ./cmd/opcli
+    vars:
+      VERSION:
+        sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+    sources: ["**/*.go", "internal/**/*.md", "internal/spec/*.gz", go.mod, go.sum]
+    generates: ["{{.BINARY}}"]
+
+  lint:
+    desc: Format and vet
+    cmds:
+      - gofmt -s -w .
+      - go vet ./...
+
+  test:
+    desc: Run all tests
+    cmds:
+      - go test ./...
+
+  docs:
+    desc: Regenerate docs/commands.md from the command registry
+    cmds:
+      - go run ./cmd/opcli docs > docs/commands.md
+
+  install:
+    desc: Build and install opcli to the user PATH
+    deps: [build]
+    cmds:
+      - mkdir -p {{.INSTALL_DIR}}
+      - cp {{.BINARY}} {{.INSTALL_DIR}}/{{.BINARY}}
+      - echo "Installed {{.INSTALL_DIR}}/{{.BINARY}}"
+
+  spec:
+    desc: Refresh the embedded OpenAPI spec from the configured server (sanitising the server URL)
+    cmds:
+      - ./{{.BINARY}} api request GET /api/v3/spec.json -o json | jq -c '.servers = [{"description":"This server","url":"https://openproject.example.com/"}]' | gzip -9 > internal/spec/openapi.json.gz
+      - echo "Update spec.EmbeddedVersion in internal/spec/spec.go to the server version (opcli api request GET /api/v3 | jq -r .coreVersion)"
+
+  clean:
+    desc: Remove built binary
+    cmds:
+      - rm -f {{.BINARY}}

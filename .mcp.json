@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "openproject": {
+      "command": "./opcli",
+      "args": ["mcp", "serve"]
+    }
+  }
+}

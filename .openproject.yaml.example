@@ -1,0 +1,10 @@
+# opcli configuration. Copy to ~/.openproject.yaml (chmod 600) or run:
+#   opcli config init --url https://op.example.com --api-key <token>
+#
+# Create the token in OpenProject: My account → Access tokens → API.
+
+url: https://op.example.com
+api_key: YOUR_API_TOKEN
+
+# Optional default project (id or identifier) for commands that need one.
+# project: demo-project
