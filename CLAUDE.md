@@ -9,7 +9,14 @@ go build -o opcli ./cmd/opcli   # build
 go vet ./...            # lint
 go test ./...           # tests (no server needed: httptest + in-memory MCP)
 go run ./cmd/opcli docs > docs/commands.md   # regenerate the reference (CI diffs it)
+task install                    # build with version/commit/date into ~/Dropbox/Charlie/bin
+task release V=vX.Y.Z           # vet + test, tag, push tag (goreleaser), install
 ```
+
+`task release` refuses unless you are on a clean `main` with a fresh
+`docs/commands.md`. The tag push publishes the GitHub release, so it needs
+explicit approval like any push. Every release ends with the binary installed
+locally; check it with `opcli --version`.
 
 Running against a server needs `~/.openproject.yaml` or `OPENPROJECT_URL` +
 `OPENPROJECT_API_KEY`. Never commit credentials, `.env`, or server URLs/IPs.
