@@ -776,7 +776,8 @@ the Gantt should use start/finish dates and the time entries' spent date.
 Working days come from the instance calendar (weekends and holidays are
 skipped); --include-weekends logs on every day. Hours are split in 15-minute
 steps, the remainder going to the first days. Time is logged for --user, else
-the assignee, else you. Notifications are off by default. Use --dry-run to
+the assignee, else you. The audit comment follows the configured language
+(language: es in the config for Spanish). Notifications are off by default. Use --dry-run to
 see the plan without writing anything.
 
 MCP tool: `op_backfill_work_package` · writes

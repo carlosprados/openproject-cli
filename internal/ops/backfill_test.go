@@ -94,3 +94,17 @@ func TestBackfillValidation(t *testing.T) {
 		t.Errorf("validation errors must not reach the server: %v", f.requests)
 	}
 }
+
+func TestBackfillCommentLanguage(t *testing.T) {
+	b := &Backfill{Start: "2026-09-14", Finish: "2026-09-15", TotalHours: 3, User: "jane",
+		Days: []BackfillDay{{Date: "2026-09-14", Hours: 1.5, TimeEntryID: 7}, {Date: "2026-09-15", Hours: 1.5, TimeEntryID: 8}}}
+	es := backfillComment(b, b.Days, "Incidencia", "ES")
+	for _, want := range []string{"Registrado a posteriori", "2026-09-14 → 2026-09-15", "3h imputadas en 2 días a nombre de jane", "(imputaciones #7, #8)", "Motivo: Incidencia"} {
+		if !strings.Contains(es, want) {
+			t.Errorf("Spanish comment %q lacks %q", es, want)
+		}
+	}
+	if en := backfillComment(b, b.Days, "", "fr"); !strings.HasPrefix(en, "**Registered retroactively**") || strings.Contains(en, "Reason") {
+		t.Errorf("unknown language should fall back to English without a reason line: %q", en)
+	}
+}

@@ -176,9 +176,24 @@ func (e *Env) ActivityID(ctx context.Context, wpID int, ref string) (int, error)
 
 // Activities lists the time-entry activities allowed for a work package.
 func (e *Env) Activities(ctx context.Context, wpID int) ([]named, error) {
-	body := map[string]any{}
+	links := map[string]any{}
 	if wpID > 0 {
-		body["_links"] = map[string]any{"entity": hal.Ref(fmt.Sprintf("/api/v3/work_packages/%d", wpID))}
+		links["entity"] = hal.Ref(href("work_packages", wpID))
+	}
+	return e.activitiesForm(ctx, links)
+}
+
+// ProjectActivities lists the time-entry activities enabled in a project,
+// for when the work package does not exist yet (the form returns none
+// without an entity or project).
+func (e *Env) ProjectActivities(ctx context.Context, projectID int) ([]named, error) {
+	return e.activitiesForm(ctx, map[string]any{"project": hal.Ref(href("projects", projectID))})
+}
+
+func (e *Env) activitiesForm(ctx context.Context, links map[string]any) ([]named, error) {
+	body := map[string]any{}
+	if len(links) > 0 {
+		body["_links"] = links
 	}
 	form, err := e.C.Post(ctx, "/time_entries/form", body)
 	if err != nil {

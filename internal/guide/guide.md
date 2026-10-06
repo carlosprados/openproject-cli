@@ -80,7 +80,8 @@ strings; durations stay ISO 8601 (`PT1H30M`).
 `~/.openproject.yaml` (mode 0600). Environment variables override it:
 `OPENPROJECT_URL`, `OPENPROJECT_API_KEY`, `OPENPROJECT_PROJECT` (default
 project), `OPENPROJECT_DEFAULT_TYPE` (type of new work packages; without it,
-the project's default type). Create the API key in OpenProject → My account → Access tokens → API.
+the project's default type), `OPENPROJECT_LANGUAGE` (`es` writes generated
+comments such as the backfill audit note in Spanish; default `en`). Create the API key in OpenProject → My account → Access tokens → API.
 
 ## MCP
 

@@ -143,6 +143,8 @@ type Env struct {
 	// DefaultType names the type of new work packages; empty means the
 	// project's default type.
 	DefaultType string
+	// Language of text opcli writes to the server (audit comments): en, es.
+	Language string
 	// ReadOnly makes op_api_request refuse anything but GET (MCP --read-only).
 	ReadOnly bool
 	cache    resolverCache

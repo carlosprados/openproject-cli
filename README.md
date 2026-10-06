@@ -66,6 +66,8 @@ the current directory > config file. See `opcli help auth`.
 
 New work packages without `--type` get `default_type` from the config
 (`--default-type` in `config init`), else the type the project marks as default.
+`language: es` (`OPENPROJECT_LANGUAGE`) writes generated comments, such as the
+`wp backfill` audit note, in Spanish; the default is English.
 
 ## Use it
 

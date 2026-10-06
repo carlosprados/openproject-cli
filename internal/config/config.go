@@ -32,6 +32,8 @@ type Config struct {
 	// DefaultType is the type of new work packages when none is given;
 	// empty means the project's default type.
 	DefaultType string `mapstructure:"default_type" yaml:"default_type,omitempty"`
+	// Language of text opcli writes to the server (en, es); default en.
+	Language string `mapstructure:"language" yaml:"language,omitempty"`
 	// File is the config file actually read (empty when none).
 	File string `mapstructure:"-" yaml:"-"`
 }
@@ -52,6 +54,7 @@ func Load(v *viper.Viper, configFile string) (*Config, error) {
 	_ = v.BindEnv("api_key", "OPENPROJECT_API_KEY")
 	_ = v.BindEnv("project", "OPENPROJECT_PROJECT")
 	_ = v.BindEnv("default_type", "OPENPROJECT_DEFAULT_TYPE")
+	_ = v.BindEnv("language", "OPENPROJECT_LANGUAGE")
 
 	if err := v.ReadInConfig(); err != nil {
 		var notFound viper.ConfigFileNotFoundError

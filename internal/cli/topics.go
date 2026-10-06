@@ -27,13 +27,14 @@ var helpTopics = []*cobra.Command{
 Alternatives (highest precedence first):
   --url / --api-key flags
   OPENPROJECT_URL, OPENPROJECT_API_KEY, OPENPROJECT_PROJECT,
-  OPENPROJECT_DEFAULT_TYPE env vars
+  OPENPROJECT_DEFAULT_TYPE, OPENPROJECT_LANGUAGE env vars
   .env file in the current directory (same variable names)
   --config <file> or ~/.openproject.yaml:
       url: https://op.example.com
       api_key: <token>
       project: demo-project   # optional default project
       default_type: Tarea     # optional; else the project's default type
+      language: es            # optional; audit comments in Spanish (default en)
 
 Check with 'opcli whoami' and 'opcli config show'. Username/password is not
 supported by the API v3 by design.`,

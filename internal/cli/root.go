@@ -52,6 +52,7 @@ func (s *state) env() (*ops.Env, error) {
 	c.UserAgent = "opcli/" + s.build.Version
 	env := ops.NewEnv(c, cfg.Project)
 	env.DefaultType = cfg.DefaultType
+	env.Language = cfg.Language
 	return env, nil
 }
 
@@ -140,7 +141,7 @@ func configCmd(st *state) *cobra.Command {
 current directory > config file. See 'opcli help auth'.`,
 	}
 
-	var url, key, project, defaultType, file string
+	var url, key, project, defaultType, language, file string
 	var noVerify bool
 	initCmd := &cobra.Command{
 		Use:   "init",
@@ -151,7 +152,7 @@ current directory > config file. See 'opcli help auth'.`,
 			if url == "" || key == "" {
 				return errors.New("--url and --api-key are required")
 			}
-			cfg := &config.Config{URL: strings.TrimRight(url, "/"), APIKey: key, Project: project, DefaultType: defaultType}
+			cfg := &config.Config{URL: strings.TrimRight(url, "/"), APIKey: key, Project: project, DefaultType: defaultType, Language: language}
 			if !noVerify {
 				me, err := client.New(cfg.URL, cfg.APIKey).Get(context.Background(), "/users/me", nil)
 				if err != nil {
@@ -176,6 +177,7 @@ current directory > config file. See 'opcli help auth'.`,
 	initCmd.Flags().StringVar(&key, "api-key", "", "API key (My account → Access tokens → API)")
 	initCmd.Flags().StringVar(&project, "project", "", "Default project (id or identifier) for commands that need one")
 	initCmd.Flags().StringVar(&defaultType, "default-type", "", "Type of new work packages when --type is omitted (default: the project's default type)")
+	initCmd.Flags().StringVar(&language, "language", "", "Language of text opcli writes to the server, such as audit comments: en (default) or es")
 	initCmd.Flags().StringVar(&file, "file", "", "Where to write (default ~/.openproject.yaml)")
 	initCmd.Flags().BoolVar(&noVerify, "no-verify", false, "Do not check the credentials against the server")
 
@@ -187,14 +189,14 @@ current directory > config file. See 'opcli help auth'.`,
 			if err != nil {
 				return err
 			}
-			out := map[string]any{"file": cfg.File, "url": cfg.URL, "api_key": cfg.MaskedKey(), "project": cfg.Project, "default_type": cfg.DefaultType}
+			out := map[string]any{"file": cfg.File, "url": cfg.URL, "api_key": cfg.MaskedKey(), "project": cfg.Project, "default_type": cfg.DefaultType, "language": cfg.Language}
 			if cfg.APIKey == "" {
 				out["api_key"] = ""
 			}
 			if st.output() == "json" {
 				return ops.RenderJSON(cmd.OutOrStdout(), out)
 			}
-			for _, k := range []string{"file", "url", "api_key", "project", "default_type"} {
+			for _, k := range []string{"file", "url", "api_key", "project", "default_type", "language"} {
 				fmt.Fprintf(cmd.OutOrStdout(), "%-13s %v\n", k+":", out[k])
 			}
 			return nil

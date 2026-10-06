@@ -59,7 +59,8 @@ the Gantt should use start/finish dates and the time entries' spent date.
 Working days come from the instance calendar (weekends and holidays are
 skipped); --include-weekends logs on every day. Hours are split in 15-minute
 steps, the remainder going to the first days. Time is logged for --user, else
-the assignee, else you. Notifications are off by default. Use --dry-run to
+the assignee, else you. The audit comment follows the configured language
+(language: es in the config for Spanish). Notifications are off by default. Use --dry-run to
 see the plan without writing anything.`,
 	Example: `  opcli wp backfill -p demo-project --subject "Hotfix MQTT broker" --assignee jane.doe \
     --from 2026-09-14 --to 2026-09-18 --hours 12h --activity Development --status Closed --dry-run
@@ -125,8 +126,7 @@ func runBackfill(ctx context.Context, e *Env, a Args) (any, error) {
 		}
 	}
 	if a.Has("activity") {
-		wp, _ := WorkPackageID(existing) // 0 for a new one: instance-wide activities
-		if _, err := e.ActivityID(ctx, wp, a.String("activity")); err != nil {
+		if err := e.checkActivity(ctx, existing, a); err != nil {
 			return nil, err
 		}
 	}
@@ -166,7 +166,7 @@ func runBackfill(ctx context.Context, e *Env, a Args) (any, error) {
 		if existing != "" {
 			b.WorkPackage = map[string]any{"id": existing}
 		}
-		b.Comment = backfillComment(b, nil, a.String("reason"))
+		b.Comment = backfillComment(b, nil, a.String("reason"), e.Language)
 		return b, nil
 	}
 
@@ -235,7 +235,7 @@ func runBackfill(ctx context.Context, e *Env, a Args) (any, error) {
 			id, from, to, d.Date, i, len(b.Days), entryIDs(b.Days[:i]), err)
 	}
 
-	b.Comment = backfillComment(b, b.Days, a.String("reason"))
+	b.Comment = backfillComment(b, b.Days, a.String("reason"), e.Language)
 	up := Args{"id": strconv.Itoa(id), "comment": b.Comment, "notify": a.Bool("notify")}
 	if a.Has("status") {
 		up["status"] = a["status"]
@@ -246,6 +246,33 @@ func runBackfill(ctx context.Context, e *Env, a Args) (any, error) {
 	}
 	b.WorkPackage = res.(map[string]any)
 	return b, nil
+}
+
+// checkActivity resolves --activity against the work package, or against
+// the target project when the work package is still to be created.
+func (e *Env) checkActivity(ctx context.Context, existing string, a Args) error {
+	ref := a.String("activity")
+	if existing != "" {
+		wp, err := WorkPackageID(existing)
+		if err != nil {
+			return err
+		}
+		_, err = e.ActivityID(ctx, wp, ref)
+		return err
+	}
+	pid, err := e.ProjectID(ctx, a.String("project"))
+	if err != nil {
+		return err
+	}
+	if _, err := strconv.Atoi(ref); err == nil {
+		return nil
+	}
+	items, err := e.ProjectActivities(ctx, pid)
+	if err != nil {
+		return err
+	}
+	_, err = pick("activity", ref, items)
+	return err
 }
 
 // workingDays returns the working days in [from, to] per the instance
@@ -326,23 +353,47 @@ func splitHours(a Args, days []string) ([]BackfillDay, error) {
 	return out, nil
 }
 
-func backfillComment(b *Backfill, days []BackfillDay, reason string) string {
+// backfillPhrases holds the audit comment in each supported language
+// (Env.Language); unknown languages fall back to English.
+var backfillPhrases = map[string]struct{ head, logged, user, entries, note, reason string }{
+	"en": {
+		head:    "**Registered retroactively** on %s. Real work dates: %s → %s.",
+		logged:  " %sh logged over %d days",
+		user:    " for %s",
+		entries: " (time entries %s)",
+		note:    " The creation date reflects when it was recorded, not when the work happened.",
+		reason:  "\n\nReason: ",
+	},
+	"es": {
+		head:    "**Registrado a posteriori** el %s. Fechas reales del trabajo: %s → %s.",
+		logged:  " %sh imputadas en %d días",
+		user:    " a nombre de %s",
+		entries: " (imputaciones %s)",
+		note:    " La fecha de creación refleja cuándo se registró, no cuándo se hizo el trabajo.",
+		reason:  "\n\nMotivo: ",
+	},
+}
+
+func backfillComment(b *Backfill, days []BackfillDay, reason, lang string) string {
+	p, ok := backfillPhrases[strings.ToLower(lang)]
+	if !ok {
+		p = backfillPhrases["en"]
+	}
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "**Registered retroactively** on %s. Real work dates: %s → %s.",
-		time.Now().Format(time.DateOnly), b.Start, b.Finish)
+	fmt.Fprintf(&sb, p.head, time.Now().Format(time.DateOnly), b.Start, b.Finish)
 	if len(b.Days) > 0 {
-		fmt.Fprintf(&sb, " %sh logged over %d days", hal.String(b.TotalHours), len(b.Days))
+		fmt.Fprintf(&sb, p.logged, hal.String(b.TotalHours), len(b.Days))
 		if b.User != "" {
-			fmt.Fprintf(&sb, " for %s", b.User)
+			fmt.Fprintf(&sb, p.user, b.User)
 		}
 		if ids := entryIDs(days); ids != "" {
-			fmt.Fprintf(&sb, " (time entries %s)", ids)
+			fmt.Fprintf(&sb, p.entries, ids)
 		}
 		sb.WriteString(".")
 	}
-	sb.WriteString(" The creation date reflects when it was recorded, not when the work happened.")
+	sb.WriteString(p.note)
 	if reason != "" {
-		sb.WriteString("\n\nReason: " + reason)
+		sb.WriteString(p.reason + reason)
 	}
 	return sb.String()
 }
