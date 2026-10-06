@@ -2,7 +2,13 @@ version: "3"
 
 vars:
   BINARY: opcli{{if eq OS "windows"}}.exe{{end}}
-  INSTALL_DIR: '{{if eq OS "windows"}}{{.HOME}}/bin{{else}}{{.HOME}}/.local/bin{{end}}'
+  INSTALL_DIR: "{{.HOME}}/Dropbox/Charlie/bin"
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo dev
+  COMMIT:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo none
+  DATE:
+    sh: date -u +%Y-%m-%dT%H:%M:%SZ
 
 tasks:
   default:
@@ -11,14 +17,13 @@ tasks:
       - task --list
 
   build:
-    desc: Build the opcli binary
-    cmds:
-      - go build -ldflags "-X main.version={{.VERSION}}" -o {{.BINARY}} ./cmd/opcli
+    desc: Build the opcli binary (version from git describe)
     vars:
-      VERSION:
-        sh: git describe --tags --always --dirty 2>/dev/null || echo dev
-    sources: ["**/*.go", "internal/**/*.md", "internal/spec/*.gz", go.mod, go.sum]
-    generates: ["{{.BINARY}}"]
+      # Task-level so a VERSION passed by release/install is honoured
+      # (global vars are rendered once, before the tag exists).
+      LDFLAGS: -s -w -X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.date={{.DATE}}
+    cmds:
+      - go build -trimpath -ldflags "{{.LDFLAGS}}" -o {{.BINARY}} ./cmd/opcli
 
   lint:
     desc: Format and vet
@@ -37,12 +42,36 @@ tasks:
       - go run ./cmd/opcli docs > docs/commands.md
 
   install:
-    desc: Build and install opcli to the user PATH
-    deps: [build]
+    desc: Build and install opcli to ~/Dropbox/Charlie/bin (on PATH)
     cmds:
+      - task: build
+        vars: { VERSION: "{{.VERSION}}" }
       - mkdir -p {{.INSTALL_DIR}}
       - cp {{.BINARY}} {{.INSTALL_DIR}}/{{.BINARY}}
-      - echo "Installed {{.INSTALL_DIR}}/{{.BINARY}}"
+      - "{{.INSTALL_DIR}}/{{.BINARY}} --version"
+
+  release:
+    desc: "Cut a version, publish it and install it: task release V=v0.3.0"
+    requires:
+      vars: [V]
+    preconditions:
+      - sh: '[[ "{{.V}}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]'
+        msg: "V must look like v1.2.3"
+      - sh: test "$(git branch --show-current)" = main
+        msg: "Release from main"
+      - sh: git diff --quiet && git diff --cached --quiet
+        msg: "Working tree not clean: commit first"
+      - sh: go run ./cmd/opcli docs | diff -q - docs/commands.md
+        msg: "docs/commands.md is stale: run task docs and commit"
+    cmds:
+      - go vet ./...
+      - go test ./...
+      - git tag -a {{.V}} -m "{{.V}}"
+      # The tag push triggers the GitHub release workflow (goreleaser).
+      - git push origin {{.V}}
+      # Vars were evaluated before the tag existed: pass the version explicitly.
+      - task: install
+        vars: { VERSION: '{{trimPrefix "v" .V}}' }
 
   spec:
     desc: Refresh the embedded OpenAPI spec from the configured server (sanitising the server URL)
