@@ -786,7 +786,7 @@ MCP tool: `op_backfill_work_package` · writes
 | `--wp` | `wp` | string |  | Existing work package id (omit and pass --subject to create one) |
 | `--subject` | `subject` | string |  | Title of the new work package (or new title for --wp) |
 | `--project` | `project` | string |  | Project of the new work package (default: configured project) |
-| `--type` | `type` | string |  | Type of the new work package (default: Task) |
+| `--type` | `type` | string |  | Type of the new work package (default: config default_type, else the project's default) |
 | `--description` | `description` | string |  | Description in Markdown |
 | `--assignee` | `assignee` | string |  | Who did the work: me, login, email, name or id |
 | `--parent` | `parent` | string |  | Parent work package id |
