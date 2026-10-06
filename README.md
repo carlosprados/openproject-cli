@@ -61,8 +61,11 @@ opcli whoami
 
 This verifies the token and writes `~/.openproject.yaml` with mode `0600`.
 Precedence: flags (`--url`, `--api-key`) > environment (`OPENPROJECT_URL`,
-`OPENPROJECT_API_KEY`, `OPENPROJECT_PROJECT`) > `.env` in the current directory >
-config file. See `opcli help auth`.
+`OPENPROJECT_API_KEY`, `OPENPROJECT_PROJECT`, `OPENPROJECT_DEFAULT_TYPE`) > `.env` in
+the current directory > config file. See `opcli help auth`.
+
+New work packages without `--type` get `default_type` from the config
+(`--default-type` in `config init`), else the type the project marks as default.
 
 ## Use it
 

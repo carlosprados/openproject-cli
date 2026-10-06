@@ -94,6 +94,28 @@ func (e *Env) TypeID(ctx context.Context, ref string) (int, error) {
 	return pick("type", ref, items)
 }
 
+// defaultTypeID picks the type of a new work package: the configured
+// default_type, else the type the project marks as default, else its first.
+func (e *Env) defaultTypeID(ctx context.Context, projectID int) (int, error) {
+	if e.DefaultType != "" {
+		return e.TypeID(ctx, e.DefaultType)
+	}
+	res, err := e.C.Get(ctx, fmt.Sprintf("/projects/%d/types", projectID), nil)
+	if err != nil {
+		return 0, err
+	}
+	els := client.Elements(res)
+	if len(els) == 0 {
+		return 0, fmt.Errorf("project %d has no work package types enabled", projectID)
+	}
+	for _, t := range els {
+		if t["isDefault"] == true {
+			return intOf(t["id"]), nil
+		}
+	}
+	return intOf(els[0]["id"]), nil
+}
+
 // PriorityID resolves a priority name or id.
 func (e *Env) PriorityID(ctx context.Context, ref string) (int, error) {
 	items, err := e.catalog(ctx, "/priorities")
