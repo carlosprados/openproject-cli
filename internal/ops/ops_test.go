@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -189,6 +190,10 @@ func (f *fakeOP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_, _ = w.Write([]byte(`{"_type":"WorkPackage","id":42,"lockVersion":6,"subject":"S","_links":{"status":{"href":"/api/v3/statuses/7","title":"In progress"}}}`))
+	case r.URL.Path == "/api/v3/time_entries" && r.Method == "POST":
+		_, _ = w.Write([]byte(`{"_type":"TimeEntry","id":` + strconv.Itoa(100+len(f.requests)) + `}`))
+	case r.URL.Path == "/api/v3/work_packages/42/activities" && r.Method == "POST":
+		_, _ = w.Write([]byte(`{"_type":"Activity::Comment","id":1}`))
 	case r.URL.Path == "/api/v3/work_packages" && r.Method == "GET":
 		_, _ = w.Write([]byte(`{"_type":"Collection","total":1,"count":1,"_embedded":{"elements":[{"id":1,"subject":"A","description":{"format":"markdown","raw":"long"},"_links":{"status":{"href":"/api/v3/statuses/1","title":"New"}}}]}}`))
 	default:

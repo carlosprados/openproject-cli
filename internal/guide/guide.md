@@ -46,6 +46,7 @@ opcli wp create -p demo-project --subject "Fix login" --type Bug --priority High
 opcli wp comment 42 --body "Deployed to staging"
 opcli wp relation add 43 --type follows --to 42
 opcli time log --wp 42 --hours 1h30m --comment "Code review" --activity Development
+opcli wp backfill --wp 42 --from -10d --to -8d --hours 6h   # work done earlier: real dates + time + audit note
 opcli time list --from week --group-by day          # my week
 opcli notification list                             # unread inbox
 ```

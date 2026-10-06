@@ -44,6 +44,7 @@ Generated with `opcli docs`. Every command is also an MCP tool with the same par
 | `opcli wp attachment download` | `op_download_attachment` | read-only | Download an attachment by its id |
 | `opcli wp attachment list` | `op_list_attachments` | read-only | List attachments of a work package |
 | `opcli wp attachment upload` | `op_upload_attachment` | writes | Attach a local file to a work package |
+| `opcli wp backfill` | `op_backfill_work_package` | writes | Record work done after the fact: real dates, hours per day and an audit comment |
 | `opcli wp comment` | `op_comment_work_package` | writes | Add a comment to a work package |
 | `opcli wp create` | `op_create_work_package` | writes | Create a work package |
 | `opcli wp delete` | `op_delete_work_package` | **destructive** | Delete a work package (irreversible, children included) |
@@ -755,6 +756,60 @@ MCP tool: `op_upload_attachment` · writes
 ```sh
   opcli wp attachment upload 42 --file ./screenshot.png
   opcli wp attachment upload 42 --file build.log --description "CI output"
+```
+
+## opcli wp backfill
+
+Record work done after the fact: real dates, hours per day and an audit comment
+
+Register work that already happened without being planned or logged.
+
+In one call it creates the work package (--subject) or reuses an existing one
+(--wp), sets its start/finish dates to the real ones (--from/--to, manual
+scheduling), spreads --hours over the working days of that range (or logs
+--hours-per-day on each), optionally moves it to --status, and adds a comment
+recording that it was registered retroactively.
+
+The creation date (createdAt) cannot be changed through the API; reports and
+the Gantt should use start/finish dates and the time entries' spent date.
+
+Working days come from the instance calendar (weekends and holidays are
+skipped); --include-weekends logs on every day. Hours are split in 15-minute
+steps, the remainder going to the first days. Time is logged for --user, else
+the assignee, else you. Notifications are off by default. Use --dry-run to
+see the plan without writing anything.
+
+MCP tool: `op_backfill_work_package` · writes
+
+| Flag | MCP param | Type | Default | Description |
+|---|---|---|---|---|
+| `--wp` | `wp` | string |  | Existing work package id (omit and pass --subject to create one) |
+| `--subject` | `subject` | string |  | Title of the new work package (or new title for --wp) |
+| `--project` | `project` | string |  | Project of the new work package (default: configured project) |
+| `--type` | `type` | string |  | Type of the new work package (default: Task) |
+| `--description` | `description` | string |  | Description in Markdown |
+| `--assignee` | `assignee` | string |  | Who did the work: me, login, email, name or id |
+| `--parent` | `parent` | string |  | Parent work package id |
+| `--status` | `status` | string |  | Final status, e.g. Closed (applied after logging time) |
+| `--from` | `from` | string |  | **required** First real day of work: YYYY-MM-DD, yesterday, -Nd |
+| `--to` | `to` | string |  | Last real day of work (default: same as --from) |
+| `--hours` | `hours` | string |  | Total time to spread over the working days: 12, 7.5, 1h30m |
+| `--hours-per-day` | `hours_per_day` | string |  | Time to log on each working day instead of a total |
+| `--estimate` | `estimate` | string |  | Estimated work of a new work package (default: the logged total) |
+| `--activity` | `activity` | string |  | Time entry activity name or id (Development, Management, ...) |
+| `--user` | `user` | string |  | Log time on behalf of this user (default: the assignee; needs permission) |
+| `--comment` | `comment` | string |  | Comment on each time entry (default: the subject) |
+| `--reason` | `reason` | string |  | Why it is registered late; appended to the audit comment |
+| `--include-weekends` | `include_weekends` | bool |  | Log time on every day of the range, not only working days |
+| `--dry-run` | `dry_run` | bool |  | Show the plan without writing anything |
+| `--notify` | `notify` | bool | `false` | Send email notifications for these changes |
+
+```sh
+  opcli wp backfill -p demo-project --subject "Hotfix MQTT broker" --assignee jane.doe \
+    --from 2026-09-14 --to 2026-09-18 --hours 12h --activity Development --status Closed --dry-run
+  opcli wp backfill --wp 42 --from 2026-09-21 --to 2026-09-23 --hours-per-day 2h \
+    --reason "Done during the incident, not reported until today"
+  opcli wp backfill --wp 42 --from -10d --to -8d     # only fix the dates, no time entries
 ```
 
 ## opcli wp comment

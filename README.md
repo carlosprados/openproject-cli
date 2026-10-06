@@ -87,6 +87,7 @@ opcli wp allowed 42 --field status                 # valid transitions right now
 opcli wp create -p website --subject "Fix login" --type Bug --priority High --assignee me
 cat spec.md | opcli wp create --subject "SSO epic" --type Epic --description-file -
 opcli wp relation add 43 --type follows --to 42
+opcli wp backfill -p website --subject "Hotfix" --assignee jane --from 2026-09-14 --to 2026-09-18 --hours 12h --dry-run  # unplanned work, real dates
 opcli time list --from month --group-by project
 opcli notification list
 opcli api describe POST /api/v3/news && opcli api request POST news --body-file news.json
