@@ -326,7 +326,7 @@ func compactAttachments(atts []map[string]any) []map[string]any {
 
 // wpFieldParams are shared by create and update.
 var wpFieldParams = []Param{
-	{Name: "type", Kind: String, Short: "t", Desc: "Type name or id (Task, Bug, Feature, Epic, Milestone...)"},
+	{Name: "type", Kind: String, Short: "t", Desc: "Type name or id (Task, Bug, Feature, Epic, Milestone...); default: config default_type, else the project's default"},
 	{Name: "description", Kind: String, Short: "d", File: true, Desc: "Description in Markdown"},
 	{Name: "status", Kind: String, Short: "s", Desc: "Status name or id (see 'opcli wp allowed <id>')"},
 	{Name: "priority", Kind: String, Desc: "Priority name or id"},
@@ -350,7 +350,8 @@ var wpCreate = &Op{
 	Aliases: []string{"new", "add"},
 	Short:   "Create a work package",
 	Long: `Create a work package. Only --subject is required: the project falls back to
-the configured default and the type to Task. Long descriptions are easier
+the configured default and the type to default_type from the config, else
+the project's default type. Long descriptions are easier
 to pass with --description-file (use - for stdin).`,
 	Example: `  opcli wp create --subject "Fix login timeout" --type Bug --priority High
   opcli wp create -p demo-project --subject "Write docs" --assignee me --due-date +7d
@@ -367,7 +368,11 @@ to pass with --description-file (use - for stdin).`,
 			return nil, err
 		}
 		if !a.Has("type") {
-			a["type"] = "Task"
+			tid, err := e.defaultTypeID(ctx, pid)
+			if err != nil {
+				return nil, err
+			}
+			a["type"] = strconv.Itoa(tid)
 		}
 		body, err := e.wpPayload(ctx, a, pid)
 		if err != nil {

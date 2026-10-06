@@ -780,7 +780,8 @@ MCP tool: `op_comment_work_package` · writes
 Create a work package
 
 Create a work package. Only --subject is required: the project falls back to
-the configured default and the type to Task. Long descriptions are easier
+the configured default and the type to default_type from the config, else
+the project's default type. Long descriptions are easier
 to pass with --description-file (use - for stdin).
 
 MCP tool: `op_create_work_package` · writes
@@ -789,7 +790,7 @@ MCP tool: `op_create_work_package` · writes
 |---|---|---|---|---|
 | `--project` | `project` | string |  | Project id, identifier or name (default: configured project) |
 | `--subject` | `subject` | string |  | **required** Title of the work package |
-| `--type` | `type` | string |  | Type name or id (Task, Bug, Feature, Epic, Milestone...) |
+| `--type` | `type` | string |  | Type name or id (Task, Bug, Feature, Epic, Milestone...); default: config default_type, else the project's default |
 | `--description` | `description` | string |  | Description in Markdown |
 | `--status` | `status` | string |  | Status name or id (see 'opcli wp allowed <id>') |
 | `--priority` | `priority` | string |  | Priority name or id |
@@ -964,7 +965,7 @@ MCP tool: `op_update_work_package` · writes
 | `--subject` | `subject` | string |  | New title |
 | `--project` | `project` | string |  | Move to this project (id, identifier or name) |
 | `--comment` | `comment` | string |  | Also add this comment (Markdown) |
-| `--type` | `type` | string |  | Type name or id (Task, Bug, Feature, Epic, Milestone...) |
+| `--type` | `type` | string |  | Type name or id (Task, Bug, Feature, Epic, Milestone...); default: config default_type, else the project's default |
 | `--description` | `description` | string |  | Description in Markdown |
 | `--status` | `status` | string |  | Status name or id (see 'opcli wp allowed <id>') |
 | `--priority` | `priority` | string |  | Priority name or id |
