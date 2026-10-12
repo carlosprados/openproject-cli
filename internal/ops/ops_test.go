@@ -14,37 +14,30 @@ import (
 	"github.com/carlosprados/openproject-cli/internal/client"
 )
 
-// TestRegistryConventions guards the CLI ↔ MCP contract: unique tool names
-// and CLI paths, snake_case params, no flag collisions, help on every op.
+// TestRegistryConventions guards the command contract: unique CLI paths,
+// snake_case params, no flag collisions, help on every op.
 func TestRegistryConventions(t *testing.T) {
 	snake := regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
-	tools := map[string]bool{}
 	paths := map[string]bool{}
 	groups := map[string]bool{"": true}
 	for _, g := range Groups() {
 		groups[g.Name] = true
 	}
-	reserved := map[string]bool{"help": true, "output": true, "config": true, "url": true, "api-key": true}
+	// yes is added by the CLI to destructive ops.
+	reserved := map[string]bool{"help": true, "output": true, "config": true, "url": true, "api-key": true, "yes": true}
 	reservedShort := map[string]bool{"h": true, "o": true, "v": true}
 
 	for _, op := range All() {
-		if !strings.HasPrefix(op.Tool, "op_") || !snake.MatchString(op.Tool) {
-			t.Errorf("%s: tool name must be op_snake_case", op.Tool)
-		}
-		if tools[op.Tool] {
-			t.Errorf("duplicate tool %s", op.Tool)
-		}
-		tools[op.Tool] = true
 		path := strings.Join(op.Cmd, " ")
 		if paths[path] {
 			t.Errorf("duplicate command %q", path)
 		}
 		paths[path] = true
 		if !groups[strings.Join(op.Cmd[:len(op.Cmd)-1], " ")] {
-			t.Errorf("%s: parent group of %q not registered", op.Tool, path)
+			t.Errorf("%s: parent group of %q not registered", path, path)
 		}
 		if op.Short == "" || op.Example == "" || op.Run == nil {
-			t.Errorf("%s: Short, Example and Run are mandatory", op.Tool)
+			t.Errorf("%s: Short, Example and Run are mandatory", path)
 		}
 
 		flags := map[string]bool{}
@@ -52,27 +45,27 @@ func TestRegistryConventions(t *testing.T) {
 		positionals := 0
 		for i, p := range op.Params {
 			if !snake.MatchString(p.Name) {
-				t.Errorf("%s: param %q is not snake_case", op.Tool, p.Name)
+				t.Errorf("%s: param %q is not snake_case", path, p.Name)
 			}
 			for _, f := range []string{p.Flag(), p.Flag() + "-file"} {
 				if f == p.Flag()+"-file" && !p.File {
 					continue
 				}
 				if flags[f] || reserved[f] {
-					t.Errorf("%s: flag --%s collides", op.Tool, f)
+					t.Errorf("%s: flag --%s collides", path, f)
 				}
 				flags[f] = true
 			}
 			if p.Short != "" {
 				if shorts[p.Short] || reservedShort[p.Short] {
-					t.Errorf("%s: shorthand -%s collides", op.Tool, p.Short)
+					t.Errorf("%s: shorthand -%s collides", path, p.Short)
 				}
 				shorts[p.Short] = true
 			}
 			if p.Positional {
 				positionals++
 				if p.Rest && i != len(op.Params)-1 && op.Params[i+1].Positional {
-					t.Errorf("%s: Rest param must be the last positional", op.Tool)
+					t.Errorf("%s: Rest param must be the last positional", path)
 				}
 			}
 			if p.Default != nil {
@@ -86,12 +79,12 @@ func TestRegistryConventions(t *testing.T) {
 					_, ok = p.Default.(bool)
 				}
 				if !ok {
-					t.Errorf("%s: default of %s has the wrong type", op.Tool, p.Name)
+					t.Errorf("%s: default of %s has the wrong type", path, p.Name)
 				}
 			}
 		}
 		if positionals > 2 {
-			t.Errorf("%s: too many positionals", op.Tool)
+			t.Errorf("%s: too many positionals", path)
 		}
 	}
 }
@@ -194,6 +187,14 @@ func (f *fakeOP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"_type":"TimeEntry","id":` + strconv.Itoa(100+len(f.requests)) + `}`))
 	case r.URL.Path == "/api/v3/work_packages/42/activities" && r.Method == "POST":
 		_, _ = w.Write([]byte(`{"_type":"Activity::Comment","id":1}`))
+	case r.URL.Path == "/api/v3/work_packages/42/attachments" && r.Method == "GET":
+		_, _ = w.Write([]byte(`{"_type":"Collection","total":1,"count":1,"_embedded":{"elements":[{"id":7,"fileName":"shot.png","fileSize":3}]}}`))
+	case (r.URL.Path == "/api/v3/work_packages/42/attachments" || r.URL.Path == "/api/v3/attachments") && r.Method == "POST":
+		_, _ = w.Write([]byte(`{"_type":"Attachment","id":` + strconv.Itoa(500+len(f.requests)) + `}`))
+	case r.URL.Path == "/api/v3/types":
+		_, _ = w.Write([]byte(`{"_type":"Collection","total":1,"count":1,"_embedded":{"elements":[{"id":1,"name":"Task"}]}}`))
+	case r.URL.Path == "/api/v3/work_packages" && r.Method == "POST":
+		_, _ = w.Write([]byte(`{"_type":"WorkPackage","id":50,"subject":"New"}`))
 	case r.URL.Path == "/api/v3/work_packages" && r.Method == "GET":
 		_, _ = w.Write([]byte(`{"_type":"Collection","total":1,"count":1,"_embedded":{"elements":[{"id":1,"subject":"A","description":{"format":"markdown","raw":"long"},"_links":{"status":{"href":"/api/v3/statuses/1","title":"New"}}}]}}`))
 	default:
@@ -211,7 +212,7 @@ func newTestEnv(t *testing.T) (*Env, *fakeOP) {
 
 func TestUpdateWorkPackageSendsLockVersionAndResolvedStatus(t *testing.T) {
 	env, f := newTestEnv(t)
-	res, err := ByTool("op_update_work_package").Execute(context.Background(), env, Args{"id": "#42", "status": "in progress"})
+	res, err := ByCmd("wp update").Execute(context.Background(), env, Args{"id": "#42", "status": "in progress"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +237,7 @@ func TestUpdateWorkPackageSendsLockVersionAndResolvedStatus(t *testing.T) {
 
 func TestListWorkPackagesBuildsFiltersAndCompacts(t *testing.T) {
 	env, f := newTestEnv(t)
-	res, err := ByTool("op_list_work_packages").Execute(context.Background(), env, Args{"project": "all", "assignee": "me", "status": "closed"})
+	res, err := ByCmd("wp list").Execute(context.Background(), env, Args{"project": "all", "assignee": "me", "status": "closed"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,24 +258,32 @@ func TestListWorkPackagesBuildsFiltersAndCompacts(t *testing.T) {
 
 func TestValidation(t *testing.T) {
 	env, _ := newTestEnv(t)
-	if _, err := ByTool("op_create_work_package").Execute(context.Background(), env, Args{}); err == nil || !strings.Contains(err.Error(), "subject") {
+	if _, err := ByCmd("wp create").Execute(context.Background(), env, Args{}); err == nil || !strings.Contains(err.Error(), "subject") {
 		t.Errorf("expected missing subject error, got %v", err)
 	}
-	if _, err := ByTool("op_create_relation").Execute(context.Background(), env, Args{"id": "1", "to": "2", "type": "bogus"}); err == nil || !strings.Contains(err.Error(), "allowed") {
+	if _, err := ByCmd("wp relation add").Execute(context.Background(), env, Args{"id": "1", "to": "2", "type": "bogus"}); err == nil || !strings.Contains(err.Error(), "allowed") {
 		t.Errorf("expected enum error, got %v", err)
 	}
-	_, err := ByTool("op_get_work_package").Execute(context.Background(), env, Args{"id": "999"})
+	_, err := ByCmd("wp get").Execute(context.Background(), env, Args{"id": "999"})
 	if !client.IsNotFound(err) {
 		t.Errorf("expected APIError 404, got %v", err)
 	}
 }
 
-func TestReadOnlyAPIRequest(t *testing.T) {
-	env, _ := newTestEnv(t)
-	env.ReadOnly = true
-	_, err := ByTool("op_api_request").Execute(context.Background(), env, Args{"method": "DELETE", "path": "work_packages/1"})
-	if err == nil || !strings.Contains(err.Error(), "read-only") {
-		t.Errorf("expected read-only refusal, got %v", err)
+func TestNeedsConfirm(t *testing.T) {
+	for _, c := range []struct {
+		cmd  string
+		args Args
+		want bool
+	}{
+		{"wp delete", Args{"id": "1"}, true},
+		{"wp update", Args{"id": "1"}, false},
+		{"api request", Args{"method": "delete"}, true},
+		{"api request", Args{"method": "PATCH"}, false},
+	} {
+		if got := ByCmd(c.cmd).NeedsConfirm(c.args); got != c.want {
+			t.Errorf("%s %v: NeedsConfirm = %v, want %v", c.cmd, c.args, got, c.want)
+		}
 	}
 }
 

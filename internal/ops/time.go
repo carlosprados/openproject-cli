@@ -44,7 +44,6 @@ var (
 )
 
 var timeList = &Op{
-	Tool:    "op_list_time_entries",
 	Cmd:     []string{"time", "list"},
 	Aliases: []string{"ls"},
 	Short:   "List time entries (yours by default) with an hour total",
@@ -156,7 +155,6 @@ func groupHours(items []map[string]any, by string) []map[string]any {
 func round2(f float64) float64 { return math.Round(f*100) / 100 }
 
 var timeLog = &Op{
-	Tool:    "op_log_time",
 	Cmd:     []string{"time", "log"},
 	Aliases: []string{"add", "create"},
 	Short:   "Log time on a work package",
@@ -196,7 +194,6 @@ var timeLog = &Op{
 }
 
 var timeUpdate = &Op{
-	Tool:    "op_update_time_entry",
 	Cmd:     []string{"time", "update"},
 	Aliases: []string{"edit"},
 	Short:   "Update a time entry",
@@ -284,7 +281,6 @@ func (e *Env) timePayload(ctx context.Context, a Args, wp int) (map[string]any, 
 }
 
 var timeDelete = &Op{
-	Tool:    "op_delete_time_entry",
 	Cmd:     []string{"time", "delete"},
 	Aliases: []string{"rm"},
 	Short:   "Delete a time entry",
@@ -300,7 +296,6 @@ var timeDelete = &Op{
 }
 
 var timeActivities = &Op{
-	Tool:  "op_list_time_activities",
 	Cmd:   []string{"time", "activities"},
 	Short: "List activities valid for time entries (optionally for a work package)",
 	Example: `  opcli time activities

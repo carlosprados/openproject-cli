@@ -34,7 +34,7 @@ func TestBackfillExistingWorkPackage(t *testing.T) {
 	env, f := newTestEnv(t)
 	// 2026-09-18 is a Friday and 2026-09-21 a Monday; /days is not served,
 	// so the weekday fallback skips the weekend.
-	res, err := ByTool("op_backfill_work_package").Execute(context.Background(), env, Args{
+	res, err := ByCmd("wp backfill").Execute(context.Background(), env, Args{
 		"wp": "42", "from": "2026-09-18", "to": "2026-09-21", "hours": "3h", "reason": "Incident",
 	})
 	if err != nil {
@@ -79,7 +79,7 @@ func TestBackfillExistingWorkPackage(t *testing.T) {
 
 func TestBackfillValidation(t *testing.T) {
 	env, f := newTestEnv(t)
-	op := ByTool("op_backfill_work_package")
+	op := ByCmd("wp backfill")
 	for args, want := range map[*Args]string{
 		{"from": "2026-09-14"}: "--subject",
 		{"wp": "42", "from": "2026-09-14", "hours": "1h", "hours_per_day": "1h"}: "not both",

@@ -27,7 +27,7 @@ Use 'opcli wp allowed <id>' to see which statuses, types, priorities,
 versions... a given work package accepts (workflows restrict transitions).`,
 	})
 
-	register(wpList, wpGet, wpCreate, wpUpdate, wpDelete, wpComment, wpActivities, wpAllowed)
+	register(wpList, wpGet, wpCreate, wpUpdate, wpDelete, wpComment, wpCommentEdit, wpActivities, wpAllowed)
 }
 
 var wpColumns = []Column{
@@ -42,7 +42,6 @@ var wpColumns = []Column{
 }
 
 var wpList = &Op{
-	Tool:    "op_list_work_packages",
 	Cmd:     []string{"wp", "list"},
 	Aliases: []string{"ls", "search"},
 	Short:   "List and search work packages with filters",
@@ -225,7 +224,7 @@ func (e *Env) resolveMany(ctx context.Context, refs []string, fn func(context.Co
 }
 
 // Fields dropped from work packages in listings to keep them lean (the
-// description and the rest are available through op_get_work_package).
+// description and the rest are available through wp get).
 var wpListNoise = map[string]bool{
 	"description": true, "laborCosts": true, "position": true, "hasProjectAttributes": true,
 	"ignoreNonWorkingDays": true, "scheduleManually": true, "displayId": true, "lockVersion": true,
@@ -253,7 +252,6 @@ func (e *Env) decorateWP(it map[string]any) {
 }
 
 var wpGet = &Op{
-	Tool:    "op_get_work_package",
 	Cmd:     []string{"wp", "get"},
 	Aliases: []string{"view", "show"},
 	Short:   "Show a work package with description, relations, children and attachments",
@@ -345,24 +343,35 @@ var wpFieldParams = []Param{
 }
 
 var wpCreate = &Op{
-	Tool:    "op_create_work_package",
 	Cmd:     []string{"wp", "create"},
 	Aliases: []string{"new", "add"},
 	Short:   "Create a work package",
 	Long: `Create a work package. Only --subject is required: the project falls back to
 the configured default and the type to default_type from the config, else
 the project's default type. Long descriptions are easier
-to pass with --description-file (use - for stdin).`,
+to pass with --description-file (use - for stdin).
+
+Local images in the description (![alt](shot.png)) are uploaded as
+attachments and the link is rewritten so they render; relative paths resolve
+against the --description-file (or the working directory). Remote URLs are
+left alone. Every file is checked before anything is written, and the files
+are claimed by the new work package in the same request.`,
 	Example: `  opcli wp create --subject "Fix login timeout" --type Bug --priority High
   opcli wp create -p demo-project --subject "Write docs" --assignee me --due-date +7d
   opcli wp create --subject "Sub-task" --parent 42 --estimate 3h
+  opcli wp create --subject "Crash on save" --type Bug --description-file bug.md --attach crash.log
   cat spec.md | opcli wp create --subject "Epic: SSO" --type Epic --description-file -`,
 	Params: append([]Param{
 		pProject(""),
 		{Name: "subject", Kind: String, Required: true, Desc: "Title of the work package"},
+		pAttach,
 	}, wpFieldParams...),
 	Safety: Write,
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
+		files, err := collectFiles(a, "description")
+		if err != nil {
+			return nil, err
+		}
 		pid, err := e.ProjectID(ctx, a.String("project"))
 		if err != nil {
 			return nil, err
@@ -379,7 +388,21 @@ to pass with --description-file (use - for stdin).`,
 			return nil, err
 		}
 		body["subject"] = a.String("subject")
-		body["_links"].(map[string]any)["project"] = hal.Ref(href("projects", pid))
+		links := body["_links"].(map[string]any)
+		links["project"] = hal.Ref(href("projects", pid))
+		// Files go up without a container and are claimed by the create,
+		// so a failed upload leaves no half-made work package behind.
+		t := e.newAttacher(0)
+		if !files.empty() {
+			texts, err := files.apply(ctx, t, a)
+			if err != nil {
+				return nil, err
+			}
+			if d, ok := texts["description"]; ok {
+				body["description"] = hal.Text(d)
+			}
+			links["attachments"] = t.claims()
+		}
 		q := url.Values{}
 		if !a.Bool("notify") {
 			q.Set("notify", "false")
@@ -390,21 +413,28 @@ to pass with --description-file (use - for stdin).`,
 		}
 		wp := hal.Flatten(res)
 		e.decorateWP(wp)
+		if len(t.Uploaded) > 0 {
+			wp["uploaded"] = t.Uploaded
+		}
 		return wp, nil
 	},
 }
 
 var wpUpdate = &Op{
-	Tool:    "op_update_work_package",
 	Cmd:     []string{"wp", "update"},
 	Aliases: []string{"edit", "set"},
 	Short:   "Update fields of a work package (status, assignee, dates, ...)",
 	Long: `Update only the fields you pass. The lock version is handled for you (a
 concurrent edit triggers one automatic retry). Pass 'none' to clear user,
 parent, version, category, dates or estimates. --comment adds a comment in
-the same call. --project moves the work package to another project.`,
+the same call. --project moves the work package to another project.
+
+Local images in --description or --comment, and --attach files, are
+uploaded first (see 'wp create'); a file already attached with the same name
+and size is reused, so re-running the same update attaches nothing new.`,
 	Example: `  opcli wp update 42 --status "In progress" --assignee me
   opcli wp update 42 --status Closed --comment "Fixed in v1.2"
+  opcli wp update 42 --comment-file review.md --attach report.pdf
   opcli wp update 42 --due-date 2026-10-15 --estimate 6h
   opcli wp update 42 --assignee none --version none
   opcli wp update 42 --fields '{"customField3":"ACME"}'`,
@@ -413,12 +443,27 @@ the same call. --project moves the work package to another project.`,
 		{Name: "subject", Kind: String, Desc: "New title"},
 		{Name: "project", Kind: String, Desc: "Move to this project (id, identifier or name)"},
 		{Name: "comment", Kind: String, File: true, Desc: "Also add this comment (Markdown)"},
+		pAttach,
 	}, wpFieldParams...),
 	Safety: Write,
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
 		id, err := WorkPackageID(a.String("id"))
 		if err != nil {
 			return nil, err
+		}
+		files, err := collectFiles(a, "description", "comment")
+		if err != nil {
+			return nil, err
+		}
+		t := e.newAttacher(id)
+		if !files.empty() {
+			texts, err := files.apply(ctx, t, a)
+			if err != nil {
+				return nil, err
+			}
+			for p, v := range texts {
+				a[p] = v
+			}
 		}
 		var res map[string]any
 		for attempt := 0; attempt < 2; attempt++ {
@@ -467,6 +512,9 @@ the same call. --project moves the work package to another project.`,
 		}
 		wp := hal.Flatten(res)
 		e.decorateWP(wp)
+		if len(t.Uploaded) > 0 {
+			wp["uploaded"] = t.Uploaded
+		}
 		return wp, nil
 	},
 }
@@ -593,7 +641,6 @@ func (e *Env) wpPayload(ctx context.Context, a Args, projectID int) (map[string]
 }
 
 var wpDelete = &Op{
-	Tool:    "op_delete_work_package",
 	Cmd:     []string{"wp", "delete"},
 	Aliases: []string{"rm"},
 	Short:   "Delete a work package (irreversible, children included)",
@@ -613,12 +660,15 @@ var wpDelete = &Op{
 }
 
 var wpComment = &Op{
-	Tool:  "op_comment_work_package",
 	Cmd:   []string{"wp", "comment"},
 	Short: "Add a comment to a work package",
-	Long:  `Add a Markdown comment. Mention users with the OpenProject syntax if needed.`,
+	Long: `Add a Markdown comment. Local images (![alt](shot.png)) are uploaded as
+attachments of the work package and rendered inline; relative paths resolve
+against --body-file (or the working directory). Fix a comment later with
+'wp comment-edit'.`,
 	Example: `  opcli wp comment 42 --body "Deployed to staging"
-  git log -1 --format=%B | opcli wp comment 42 --body-file -`,
+  git log -1 --format=%B | opcli wp comment 42 --body-file -
+  opcli wp comment 42 --body-file notes/review.md   # with ![](shot.png) inside`,
 	Params: []Param{
 		pID("Work package"),
 		{Name: "body", Kind: String, Required: true, File: true, Short: "b", Desc: "Comment text (Markdown)"},
@@ -629,18 +679,71 @@ var wpComment = &Op{
 		if err != nil {
 			return nil, err
 		}
-		res, err := e.C.Post(ctx, fmt.Sprintf("/work_packages/%d/activities", id), map[string]any{"comment": hal.Text(a.String("body"))})
-		if err != nil {
-			return nil, err
-		}
-		act := flattenActivity(res)
-		e.nameUser(ctx, act, map[int]string{})
-		return act, nil
+		return e.writeComment(ctx, id, a, func(body string) (map[string]any, error) {
+			return e.C.Post(ctx, fmt.Sprintf("/work_packages/%d/activities", id), map[string]any{"comment": hal.Text(body)})
+		})
 	},
 }
 
+var wpCommentEdit = &Op{
+	Cmd:   []string{"wp", "comment-edit"},
+	Short: "Replace the text of a comment",
+	Long: `Replace the text of an existing comment. The id is the activity id shown
+by 'wp activities' (or 'wp get --activities'). Only your own comments can be
+edited unless your role allows editing others'. Comments cannot be deleted
+through the API. Local images are handled as in 'wp comment'.`,
+	Example: `  opcli wp comment-edit 1234 --body "Deployed to production"
+  opcli wp comment-edit 1234 --body-file fixed.md`,
+	Params: []Param{
+		pID("Activity (comment)"),
+		{Name: "body", Kind: String, Required: true, File: true, Short: "b", Desc: "New comment text (Markdown)"},
+	},
+	Safety: Write,
+	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
+		aid := a.String("id")
+		cur, err := e.C.Get(ctx, "/activities/"+url.PathEscape(aid), nil)
+		if err != nil {
+			return nil, err
+		}
+		wpID := intOf(hal.IDFromHref(hal.Link(cur, "workPackage")))
+		return e.writeComment(ctx, wpID, a, func(body string) (map[string]any, error) {
+			return e.C.Patch(ctx, "/activities/"+url.PathEscape(aid), map[string]any{"comment": hal.Text(body)})
+		})
+	},
+}
+
+// writeComment uploads the local images of --body to the work package and
+// sends the rewritten text with send.
+func (e *Env) writeComment(ctx context.Context, wpID int, a Args, send func(string) (map[string]any, error)) (any, error) {
+	files, err := collectFiles(a, "body")
+	if err != nil {
+		return nil, err
+	}
+	body := a.String("body")
+	t := e.newAttacher(wpID)
+	if !files.empty() {
+		if wpID == 0 {
+			return nil, fmt.Errorf("cannot attach images: the comment does not belong to a work package")
+		}
+		texts, err := files.apply(ctx, t, a)
+		if err != nil {
+			return nil, err
+		}
+		body = texts["body"]
+	}
+	res, err := send(body)
+	if err != nil {
+		return nil, err
+	}
+	act := flattenActivity(res)
+	e.nameUser(ctx, act, map[int]string{})
+	if len(t.Uploaded) > 0 {
+		act["uploaded"] = t.Uploaded
+	}
+	return act, nil
+}
+
 var wpActivities = &Op{
-	Tool:    "op_list_work_package_activities",
 	Cmd:     []string{"wp", "activities"},
 	Aliases: []string{"history", "comments"},
 	Short:   "Show comments and change history of a work package",
@@ -723,7 +826,6 @@ func flattenActivity(res map[string]any) map[string]any {
 }
 
 var wpAllowed = &Op{
-	Tool:  "op_list_work_package_allowed_values",
 	Cmd:   []string{"wp", "allowed"},
 	Short: "Show values a work package accepts: statuses, types, priorities, versions...",
 	Long: `Ask OpenProject which values each field of a work package accepts right now.

@@ -42,13 +42,15 @@ tasks:
       - go run ./cmd/opcli docs > docs/commands.md
 
   install:
-    desc: Build and install opcli to ~/Dropbox/Charlie/bin (on PATH)
+    desc: Build and install opcli to ~/Dropbox/Charlie/bin (on PATH), plus its agent skill
     cmds:
       - task: build
         vars: { VERSION: "{{.VERSION}}" }
       - mkdir -p {{.INSTALL_DIR}}
       - cp {{.BINARY}} {{.INSTALL_DIR}}/{{.BINARY}}
       - "{{.INSTALL_DIR}}/{{.BINARY}} --version"
+      # Keep the agent skill in step with the binary.
+      - "{{.INSTALL_DIR}}/{{.BINARY}} skill install --force"
 
   release:
     desc: "Cut a version, publish it and install it: task release V=v0.3.0"

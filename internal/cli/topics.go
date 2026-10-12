@@ -78,7 +78,8 @@ Look up any endpoint's filters with 'opcli api describe GET <path>'.`,
 		Use:   "output",
 		Short: "Output formats and the shape of JSON results",
 		Long: `-o text (default): tables for lists, "key: value" records for single items.
--o json: exactly what the equivalent MCP tool returns.
+-o json: a stable contract for scripts and agents; every command honours it,
+         writes included.
 
 JSON shapes:
   lists    {"total": 37, "count": 20, "items": [...]}   total > count → more pages
@@ -88,6 +89,8 @@ JSON shapes:
              "estimatedTime": "PT2H"   (ISO 8601 durations)
              "url": "<browser link>"   (work packages)
   actions  {"ok": true, "message": "..."}
+  writes   the created/updated record; "uploaded": [{id, fileName, reused}]
+           lists the files sent with it (--attach, local Markdown images)
 
 Pipe JSON to jq:
   opcli wp list --assignee me -o json | jq -r '.items[] | "\(.id) \(.subject)"'
@@ -96,30 +99,28 @@ Pipe JSON to jq:
 	},
 	{
 		Use:   "agents",
-		Short: "Using opcli from AI agents through MCP",
-		Long: `'opcli mcp serve' runs a Model Context Protocol server over stdio.
+		Short: "Using opcli from AI agents: the embedded skill",
+		Long: `Agents drive opcli from the shell, guided by a skill document embedded in
+the binary (so it always matches the installed version):
 
-Tools       every CLI command, same parameters in snake_case
-            (--due-date → due_date). 'opcli mcp tools' lists them.
-Resources   openproject://guide, openproject://me, openproject://catalog,
-            openproject://projects, openproject://my/work_packages, ...
-            'opcli mcp resources' lists them.
-Prompts     my_work, triage_work_package, project_status_report, log_time,
-            timesheet_review, draft_work_package.
+  opcli skill install            ~/.claude/skills/opcli/SKILL.md (Claude Code)
+  opcli skill install --repo     ./.claude/skills/opcli/SKILL.md
+  opcli skill show               print it, for any other agent
 
---read-only exposes only non-modifying tools (op_api_request is GET-only).
+What makes opcli safe to script:
+  -o json on every command, writes included (see 'opcli help output')
+  names instead of ids, and errors that list the valid values
+  destructive commands fail without a terminal unless --yes is passed
+  errors go to stderr as one line, exit code 1
 
-Register it in Claude Code:
-  claude mcp add openproject -- opcli mcp serve
-or print a JSON snippet for other clients with 'opcli mcp config'.
-Credentials come from the usual config (file or OPENPROJECT_* env).`,
+Re-run 'opcli skill install --force' after upgrading.`,
 	},
 }
 
 func docsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "docs",
-		Short:   "Print a Markdown reference of every command and its MCP tool",
+		Short:   "Print a Markdown reference of every command",
 		Example: `  opcli docs > docs/commands.md`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return writeDocs(cmd.OutOrStdout())
@@ -130,23 +131,23 @@ func docsCmd() *cobra.Command {
 func writeDocs(w io.Writer) error {
 	fmt.Fprintln(w, "# opcli command reference")
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Generated with `opcli docs`. Every command is also an MCP tool with the same parameters (flags in kebab-case ↔ tool parameters in snake_case). Global flags: `--config`, `--url`, `--api-key`, `-o text|json`.")
+	fmt.Fprintln(w, "Generated with `opcli docs`. Global flags: `--config`, `--url`, `--api-key`, `-o text|json`. Destructive commands also take `--yes`.")
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "| Command | MCP tool | Effect | Summary |")
-	fmt.Fprintln(w, "|---|---|---|---|")
+	fmt.Fprintln(w, "| Command | Effect | Summary |")
+	fmt.Fprintln(w, "|---|---|---|")
 	all := ops.All()
 	for _, op := range all {
-		fmt.Fprintf(w, "| `opcli %s` | `%s` | %s | %s |\n", strings.Join(op.Cmd, " "), op.Tool, safetyLabel(op.Safety), op.Short)
+		fmt.Fprintf(w, "| `opcli %s` | %s | %s |\n", strings.Join(op.Cmd, " "), safetyLabel(op.Safety), op.Short)
 	}
 	for _, op := range all {
 		fmt.Fprintf(w, "\n## opcli %s\n\n%s\n\n", strings.Join(op.Cmd, " "), op.Short)
 		if op.Long != "" {
 			fmt.Fprintf(w, "%s\n\n", op.Long)
 		}
-		fmt.Fprintf(w, "MCP tool: `%s` · %s\n\n", op.Tool, safetyLabel(op.Safety))
+		fmt.Fprintf(w, "Effect: %s\n\n", safetyLabel(op.Safety))
 		if len(op.Params) > 0 {
-			fmt.Fprintln(w, "| Flag | MCP param | Type | Default | Description |")
-			fmt.Fprintln(w, "|---|---|---|---|---|")
+			fmt.Fprintln(w, "| Flag | Type | Default | Description |")
+			fmt.Fprintln(w, "|---|---|---|---|")
 			params := append([]ops.Param(nil), op.Params...)
 			sort.SliceStable(params, func(i, j int) bool { return params[i].Positional && !params[j].Positional })
 			for _, p := range params {
@@ -162,7 +163,7 @@ func writeDocs(w io.Writer) error {
 				if p.Required {
 					desc = "**required** " + desc
 				}
-				fmt.Fprintf(w, "| %s | `%s` | %s | %s | %s |\n", flag, p.Name, kindName(p.Kind), def, desc)
+				fmt.Fprintf(w, "| %s | %s | %s | %s |\n", flag, kindName(p.Kind), def, desc)
 			}
 			fmt.Fprintln(w)
 		}

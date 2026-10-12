@@ -24,7 +24,6 @@ func init() {
 var relationTypes = []string{"relates", "duplicates", "duplicated", "blocks", "blocked", "precedes", "follows", "includes", "partof", "requires", "required"}
 
 var relList = &Op{
-	Tool:    "op_list_relations",
 	Cmd:     []string{"wp", "relation", "list"},
 	Aliases: []string{"ls"},
 	Short:   "List relations of a work package",
@@ -46,7 +45,6 @@ var relList = &Op{
 }
 
 var relCreate = &Op{
-	Tool:    "op_create_relation",
 	Cmd:     []string{"wp", "relation", "add"},
 	Aliases: []string{"create"},
 	Short:   "Relate two work packages",
@@ -92,7 +90,6 @@ starts after #10 finishes; "12 blocks 10" means #10 cannot be closed before
 }
 
 var relDelete = &Op{
-	Tool:    "op_delete_relation",
 	Cmd:     []string{"wp", "relation", "delete"},
 	Aliases: []string{"rm"},
 	Short:   "Delete a relation by its id (see 'wp relation list')",
@@ -109,7 +106,6 @@ var relDelete = &Op{
 }
 
 var watchList = &Op{
-	Tool:    "op_list_watchers",
 	Cmd:     []string{"wp", "watcher", "list"},
 	Aliases: []string{"ls"},
 	Short:   "List watchers of a work package",
@@ -126,7 +122,6 @@ var watchList = &Op{
 }
 
 var watchAdd = &Op{
-	Tool:  "op_add_watcher",
 	Cmd:   []string{"wp", "watcher", "add"},
 	Short: "Add a watcher to a work package",
 	Example: `  opcli wp watcher add 42 --user me
@@ -153,7 +148,6 @@ var watchAdd = &Op{
 }
 
 var watchRemove = &Op{
-	Tool:    "op_remove_watcher",
 	Cmd:     []string{"wp", "watcher", "remove"},
 	Aliases: []string{"rm"},
 	Short:   "Remove a watcher from a work package",
@@ -180,7 +174,6 @@ var watchRemove = &Op{
 }
 
 var attList = &Op{
-	Tool:    "op_list_attachments",
 	Cmd:     []string{"wp", "attachment", "list"},
 	Aliases: []string{"ls"},
 	Short:   "List attachments of a work package",
@@ -202,11 +195,10 @@ var attList = &Op{
 }
 
 var attUpload = &Op{
-	Tool:  "op_upload_attachment",
 	Cmd:   []string{"wp", "attachment", "upload"},
 	Short: "Attach a local file to a work package",
-	Long: `Upload a file. With MCP the path is read on the machine running the
-opcli MCP server, not on the client.`,
+	Long: `Upload one file. To attach several at once, or while creating or
+updating a work package, use --attach on 'wp create' / 'wp update'.`,
 	Example: `  opcli wp attachment upload 42 --file ./screenshot.png
   opcli wp attachment upload 42 --file build.log --description "CI output"`,
 	Params: []Param{
@@ -229,7 +221,6 @@ opcli MCP server, not on the client.`,
 }
 
 var attDownload = &Op{
-	Tool:  "op_download_attachment",
 	Cmd:   []string{"wp", "attachment", "download"},
 	Short: "Download an attachment by its id",
 	Long: `Download an attachment (ids come from 'wp attachment list' or 'wp get').
@@ -289,7 +280,6 @@ func isTextual(contentType string, data []byte) bool {
 }
 
 var attDelete = &Op{
-	Tool:    "op_delete_attachment",
 	Cmd:     []string{"wp", "attachment", "delete"},
 	Aliases: []string{"rm"},
 	Short:   "Delete an attachment by its id",

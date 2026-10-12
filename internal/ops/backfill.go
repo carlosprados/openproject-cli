@@ -17,7 +17,7 @@ import (
 
 func init() { register(wpBackfill) }
 
-// Backfill is the result (or, with dry_run, the plan) of op_backfill_work_package.
+// Backfill is the result (or, with dry_run, the plan) of wp backfill.
 type Backfill struct {
 	DryRun      bool           `json:"dryRun,omitempty"`
 	WorkPackage map[string]any `json:"workPackage,omitempty"`
@@ -41,7 +41,6 @@ type BackfillDay struct {
 }
 
 var wpBackfill = &Op{
-	Tool:    "op_backfill_work_package",
 	Cmd:     []string{"wp", "backfill"},
 	Aliases: []string{"retro"},
 	Short:   "Record work done after the fact: real dates, hours per day and an audit comment",
@@ -172,7 +171,7 @@ func runBackfill(ctx context.Context, e *Env, a Args) (any, error) {
 
 	sched, _ := json.Marshal(map[string]any{"scheduleManually": true, "ignoreNonWorkingDays": b.IgnoreNonWorkingDays})
 	wpArgs := Args{"start_date": from, "due_date": to, "fields": string(sched), "notify": a.Bool("notify")}
-	for _, k := range []string{"subject", "description", "assignee", "parent"} {
+	for _, k := range []string{"subject", "description", FileDirKey("description"), "assignee", "parent"} {
 		if a.Has(k) {
 			wpArgs[k] = a[k]
 		}
