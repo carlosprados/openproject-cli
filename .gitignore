@@ -12,3 +12,6 @@ secret.txt
 .claude/settings.local.json
 .task/
 .tmuxp.yaml
+
+# Local OpenProject lab (task lab:up)
+.lab/

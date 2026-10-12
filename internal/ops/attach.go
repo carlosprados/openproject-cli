@@ -222,6 +222,17 @@ func (t *attacher) rewrite(ctx context.Context, text string, imgs []imageRef) (s
 	return text, nil
 }
 
+// discard deletes what a failed create uploaded without a container. Best
+// effort: OpenProject also purges unclaimed attachments every night.
+func (t *attacher) discard(ctx context.Context) {
+	if t.wpID > 0 {
+		return
+	}
+	for _, u := range t.Uploaded {
+		_ = t.e.C.Delete(ctx, fmt.Sprintf("/attachments/%d", intOf(u["id"])))
+	}
+}
+
 // claims returns the _links.attachments of a create for the uploaded files.
 func (t *attacher) claims() []any {
 	out := make([]any, 0, len(t.Uploaded))

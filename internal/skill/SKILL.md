@@ -37,6 +37,7 @@ and may change. Every command honours `-o json`, writes included.
 |---|---|
 | any `list` | `{total, count, items: [...]}` — `total > count` means more pages |
 | `wp get`, `project get`, `user get`, `meeting get` | one flat record |
+| `wp allowed` | `{<field>: [{id, name}, …]}`, e.g. `jq -r '.status[].name'` |
 | `wp create`, `wp update`, `wp comment`, `wp comment-edit` | the record written (+ `uploaded[]`) |
 | `time log`, `time update`, `wp relation add`, `membership add` | the record created/updated, with its `id` |
 | `wp delete`, `time delete`, `notification read`, … | `{ok: true, message}` |
@@ -148,7 +149,8 @@ Re-sending the same text does not attach an image again (same name and size).
 
 **Files**: `--attach` (repeatable) on `wp create` and `wp update`. On create
 the files are uploaded first and claimed by the new work package in the same
-request: a failed upload leaves no half-made work package. JSON output lists
+request: a failed upload leaves no half-made work package, and a rejected
+create deletes the files it uploaded. JSON output lists
 what was sent in `uploaded[]` (`reused: true` when it was already attached).
 
 ## Write

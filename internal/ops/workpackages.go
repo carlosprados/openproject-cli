@@ -409,6 +409,7 @@ are claimed by the new work package in the same request.`,
 		}
 		res, err := e.C.JSON(ctx, "POST", "/work_packages", q, body)
 		if err != nil {
+			t.discard(ctx)
 			return nil, err
 		}
 		wp := hal.Flatten(res)
@@ -707,7 +708,9 @@ through the API. Local images are handled as in 'wp comment'.`,
 		}
 		wpID := intOf(hal.IDFromHref(hal.Link(cur, "workPackage")))
 		return e.writeComment(ctx, wpID, a, func(body string) (map[string]any, error) {
-			return e.C.Patch(ctx, "/activities/"+url.PathEscape(aid), map[string]any{"comment": hal.Text(body)})
+			// The spec documents an object, but the server only accepts a
+			// plain string here ({"raw": …} is "comment is invalid").
+			return e.C.Patch(ctx, "/activities/"+url.PathEscape(aid), map[string]any{"comment": body})
 		})
 	},
 }

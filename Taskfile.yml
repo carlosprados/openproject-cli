@@ -9,6 +9,9 @@ vars:
     sh: git rev-parse --short HEAD 2>/dev/null || echo none
   DATE:
     sh: date -u +%Y-%m-%dT%H:%M:%SZ
+  LAB_NAME: opcli-lab
+  LAB_PORT: '{{.LAB_PORT | default "8092"}}'
+  LAB_URL: http://localhost:{{.LAB_PORT}}
 
 tasks:
   default:
@@ -80,6 +83,33 @@ tasks:
     cmds:
       - ./{{.BINARY}} api request GET /api/v3/spec.json -o json | jq -c '.servers = [{"description":"This server","url":"https://openproject.example.com/"}]' | gzip -9 > internal/spec/openapi.json.gz
       - echo "Update spec.EmbeddedVersion in internal/spec/spec.go to the server version (opcli api request GET /api/v3 | jq -r .coreVersion)"
+
+  lab:up:
+    desc: "Throwaway OpenProject 17 in Docker for live tests (data is lost on lab:down): task lab:up [LAB_PORT=8092]"
+    preconditions:
+      - sh: test -z "$(docker ps -aq --filter name=^{{.LAB_NAME}}$)"
+        msg: "{{.LAB_NAME}} already exists: task lab:down first"
+    cmds:
+      # OpenProject 17 reads SECRET_KEY_BASE; with the old OPENPROJECT_ name it crash-loops.
+      - docker run -d --name {{.LAB_NAME}} -p 127.0.0.1:{{.LAB_PORT}}:80 -e SECRET_KEY_BASE=$(openssl rand -hex 64) -e OPENPROJECT_HOST__NAME=localhost:{{.LAB_PORT}} -e OPENPROJECT_HTTPS=false -e OPENPROJECT_DEFAULT__LANGUAGE=en openproject/openproject:17
+      - |
+        echo "Waiting for the API (about a minute)…"
+        for i in $(seq 1 60); do
+          [ "$(curl -s -o /dev/null -w '%{http_code}' {{.LAB_URL}}/api/v3/projects)" = 401 ] && exit 0
+          sleep 5
+        done
+        echo "API not up after 5 minutes: docker logs {{.LAB_NAME}}" >&2; exit 1
+      - |
+        key=$(docker exec {{.LAB_NAME}} bash -lc 'cd /app && bundle exec rails runner "puts Token::API.create!(user: User.find_by!(login: %q(admin)), token_name: %q(opcli-lab)).plain_value" 2>/dev/null' | tail -1)
+        mkdir -p .lab
+        go run ./cmd/opcli config init --url {{.LAB_URL}} --api-key "$key" --project demo-project --file .lab/opcli.yaml
+      - 'echo "Lab ready: opcli --config .lab/opcli.yaml … (UI {{.LAB_URL}}, admin/admin)"'
+
+  lab:down:
+    desc: Remove the lab container and its config
+    cmds:
+      - docker rm -f {{.LAB_NAME}}
+      - rm -rf .lab
 
   clean:
     desc: Remove built binary
