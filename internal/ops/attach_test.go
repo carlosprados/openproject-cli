@@ -132,3 +132,25 @@ func TestCreateClaimsUploadedFiles(t *testing.T) {
 		t.Errorf("claims %v, description %q", claims, desc)
 	}
 }
+
+// A rejected create deletes the files it uploaded without a container.
+func TestFailedCreateDiscardsUploads(t *testing.T) {
+	dir := writeFiles(t, map[string]string{"d.png": "x"})
+	env, f := newTestEnv(t)
+	_, err := ByCmd("wp create").Execute(context.Background(), env, Args{
+		"project": "4", "type": "Task", "subject": "fail",
+		"description": "![d](d.png)", FileDirKey("description"): dir,
+	})
+	if err == nil {
+		t.Fatal("expected the create to fail")
+	}
+	deleted := 0
+	for _, r := range f.requests {
+		if strings.HasPrefix(r, "DELETE /api/v3/attachments/") {
+			deleted++
+		}
+	}
+	if deleted != 1 {
+		t.Errorf("deleted %d uploads, want 1: %v", deleted, f.requests)
+	}
+}

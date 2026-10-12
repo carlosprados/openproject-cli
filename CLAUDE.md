@@ -60,6 +60,8 @@ by design: agents drive it from the shell, guided by the embedded skill
 - Status transitions depend on workflows: `/work_packages/{id}/form` schema
   `allowedValues` is the truth (`wp allowed`).
 - `notify=false` is a query parameter, not a body field.
+- `PATCH /activities/{id}` takes `comment` as a plain string, although the
+  spec says object; `POST /work_packages/{id}/activities` takes `{raw}`.
 - Activity `user` links carry no title; `nameUser` resolves names.
 
 ## Development rules

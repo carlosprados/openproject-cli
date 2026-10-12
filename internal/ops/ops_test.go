@@ -193,6 +193,11 @@ func (f *fakeOP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"_type":"Attachment","id":` + strconv.Itoa(500+len(f.requests)) + `}`))
 	case r.URL.Path == "/api/v3/types":
 		_, _ = w.Write([]byte(`{"_type":"Collection","total":1,"count":1,"_embedded":{"elements":[{"id":1,"name":"Task"}]}}`))
+	case r.URL.Path == "/api/v3/work_packages" && r.Method == "POST" && body["subject"] == "fail":
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"_type":"Error","message":"Type is not set to one of the allowed values."}`))
+	case strings.HasPrefix(r.URL.Path, "/api/v3/attachments/") && r.Method == "DELETE":
+		w.WriteHeader(http.StatusNoContent)
 	case r.URL.Path == "/api/v3/work_packages" && r.Method == "POST":
 		_, _ = w.Write([]byte(`{"_type":"WorkPackage","id":50,"subject":"New"}`))
 	case r.URL.Path == "/api/v3/work_packages" && r.Method == "GET":
