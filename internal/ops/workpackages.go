@@ -27,7 +27,7 @@ Use 'opcli wp allowed <id>' to see which statuses, types, priorities,
 versions... a given work package accepts (workflows restrict transitions).`,
 	})
 
-	register(wpList, wpGet, wpCreate, wpUpdate, wpDelete, wpComment, wpCommentEdit, wpActivities, wpAllowed)
+	register(wpList, wpGet, wpCreate, wpUpdate, wpDelete, wpComment, wpCommentEdit, wpActivities, wpAllowed, wpFieldsOp)
 }
 
 var wpColumns = []Column{
@@ -54,6 +54,11 @@ status names/ids ("New,In progress"). --assignee/--author/--responsible accept
 me, none, a login, email, name or id. --search does full-text search over
 subject, description and comments.
 
+--field filters by any field by its name, custom fields included
+("Customer=ACME"; text fields match by "contains", lists, users and versions
+by name, "NAME=" finds empty ones). It needs a project. Custom fields come
+back by name under "customFields".
+
 --filter takes raw API filters (JSON) for anything not covered by flags, e.g.
   [{"dueDate":{"operator":"<t+","values":["7"]}}]
 See 'opcli help filters' for operators. --query-id runs a saved query instead.`,
@@ -62,6 +67,7 @@ See 'opcli help filters' for operators. --query-id runs a saved query instead.`,
   opcli wp list -p demo-project --type Bug --status all
   opcli wp list --search "login timeout" --max 10
   opcli wp list --status "In progress,On hold" --sort dueDate:asc
+  opcli wp list -p demo-project --field "Customer=ACME" --field "Billable=yes"
   opcli wp list --filter '[{"dueDate":{"operator":"<t+","values":["7"]}}]'
   opcli wp list --query-id 12                    # run a saved query
   opcli wp list --assignee me -o json            # machine-readable`,
@@ -76,6 +82,7 @@ See 'opcli help filters' for operators. --query-id runs a saved query instead.`,
 		{Name: "version", Kind: String, Desc: "Target version name or id (name needs a project)"},
 		{Name: "parent", Kind: String, Desc: "Only direct children of this work package id"},
 		{Name: "search", Kind: String, Short: "q", Desc: "Full-text search in subject, description and comments"},
+		{Name: "field", Kind: Strings, Desc: `Filter by any field by name, NAME=VALUE (repeatable): "Customer=ACME", "Area=Backend,Ops"; "NAME=" means empty; needs a project`},
 		{Name: "filter", Kind: String, Desc: "Extra raw API filters as a JSON array (see 'opcli help filters')"},
 		{Name: "sort", Kind: String, Default: "updatedAt:desc", Desc: "Sort spec field:asc|desc, comma-separated (id, subject, updatedAt, dueDate, priority, status...)"},
 		{Name: "query_id", Kind: Int, Desc: "Run a saved query by id (other filters are ignored)"},
@@ -150,8 +157,11 @@ See 'opcli help filters' for operators. --query-id runs a saved query instead.`,
 		if s := a.String("search"); s != "" {
 			f = f.Add("search", "**", s)
 		}
-		f, err := f.Merge(a.String("filter"))
+		f, err := e.fieldFilters(ctx, f, rawStrings(a["field"]), projectID)
 		if err != nil {
+			return nil, err
+		}
+		if f, err = f.Merge(a.String("filter")); err != nil {
 			return nil, err
 		}
 		q := url.Values{"filters": {f.JSON()}}
@@ -164,9 +174,12 @@ See 'opcli help filters' for operators. --query-id runs a saved query instead.`,
 		}
 		l, err := e.list(ctx, "/work_packages", q, a)
 		if err != nil {
+			if strings.Contains(err.Error(), "filter does not exist") && a.Has("field") {
+				return nil, fmt.Errorf("%w: OpenProject cannot filter by this field (user and version custom fields are not filterable); filter by another field and check the value with jq", err)
+			}
 			return nil, err
 		}
-		e.decorateWPs(l.Items)
+		e.decorateWPs(ctx, l.Items)
 		return l, nil
 	},
 }
@@ -186,7 +199,7 @@ func (e *Env) runSavedQuery(ctx context.Context, id int, a Args) (*List, error) 
 	emb, _ := res["_embedded"].(map[string]any)
 	results, _ := emb["results"].(map[string]any)
 	l := NewList(hal.FlattenAll(client.Elements(results)), intOf(results["total"]))
-	e.decorateWPs(l.Items)
+	e.decorateWPs(ctx, l.Items)
 	return l, nil
 }
 
@@ -232,10 +245,11 @@ var wpListNoise = map[string]bool{
 	"derivedRemainingTime": true, "derivedPercentageDone": true, "backlogBucket": true,
 }
 
-// decorateWPs adds the browser URL and drops empty and noisy fields.
-func (e *Env) decorateWPs(items []map[string]any) {
+// decorateWPs adds the browser URL, names custom fields and drops empty and
+// noisy fields.
+func (e *Env) decorateWPs(ctx context.Context, items []map[string]any) {
 	for _, it := range items {
-		e.decorateWP(it)
+		e.decorateWP(ctx, it)
 		for k, v := range it {
 			if v == nil || v == "" || wpListNoise[k] {
 				delete(it, k)
@@ -244,11 +258,12 @@ func (e *Env) decorateWPs(items []map[string]any) {
 	}
 }
 
-func (e *Env) decorateWP(it map[string]any) {
+func (e *Env) decorateWP(ctx context.Context, it map[string]any) {
 	if id := intOf(it["id"]); id > 0 {
 		it["url"] = e.C.WebURL(fmt.Sprintf("/work_packages/%d", id))
 	}
 	delete(it, "_type")
+	e.customFieldLabels(ctx, []map[string]any{it})
 }
 
 var wpGet = &Op{
@@ -274,7 +289,7 @@ children, attachments and (with --activities) the comment/change history.`,
 			return nil, err
 		}
 		wp := hal.Flatten(res, "relations", "attachments")
-		e.decorateWP(wp)
+		e.decorateWP(ctx, wp)
 		if links, ok := res["_links"].(map[string]any); ok {
 			if ch, ok := links["children"].([]any); ok && len(ch) > 0 {
 				var children []map[string]any
@@ -338,7 +353,8 @@ var wpFieldParams = []Param{
 	{Name: "estimate", Kind: String, Desc: "Estimated work: 4, 1.5, 90m, 2h30m or PT2H ('none' to clear)"},
 	{Name: "remaining", Kind: String, Desc: "Remaining work, same formats as --estimate"},
 	{Name: "percent_done", Kind: Int, Desc: "% complete (0-100), when progress is work-based"},
-	{Name: "fields", Kind: String, Desc: `Raw JSON object merged into the request, for custom fields or anything else, e.g. {"customField3":"x"}`},
+	pField,
+	{Name: "fields", Kind: String, Desc: `Raw JSON object merged into the request, e.g. {"customField3":"x"}; prefer --field`},
 	{Name: "notify", Kind: Bool, Default: true, Desc: "Send email notifications for this change"},
 }
 
@@ -351,14 +367,21 @@ the configured default and the type to default_type from the config, else
 the project's default type. Long descriptions are easier
 to pass with --description-file (use - for stdin).
 
+Custom fields and any other field go by name with --field NAME=VALUE (see
+'opcli wp fields' for the names and allowed values). Before anything is
+written the server validates the whole request through its form, so a
+missing required field or a value that is not allowed fails with the list
+of valid values, and --dry-run shows exactly what would be sent.
+
 Local images in the description (![alt](shot.png)) are uploaded as
 attachments and the link is rewritten so they render; relative paths resolve
 against the --description-file (or the working directory). Remote URLs are
-left alone. Every file is checked before anything is written, and the files
-are claimed by the new work package in the same request.`,
+left alone. The files are claimed by the new work package in the same
+request. @login in the description becomes a mention that notifies the user.`,
 	Example: `  opcli wp create --subject "Fix login timeout" --type Bug --priority High
   opcli wp create -p demo-project --subject "Write docs" --assignee me --due-date +7d
   opcli wp create --subject "Sub-task" --parent 42 --estimate 3h
+  opcli wp create --subject "Onboarding" --field "Customer=ACME" --field "Area=Backend"
   opcli wp create --subject "Crash on save" --type Bug --description-file bug.md --attach crash.log
   cat spec.md | opcli wp create --subject "Epic: SSO" --type Epic --description-file -`,
 	Params: append([]Param{
@@ -368,6 +391,10 @@ are claimed by the new work package in the same request.`,
 	}, wpFieldParams...),
 	Safety: Write,
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
+		men, err := e.mentionArgs(ctx, a, "description")
+		if err != nil {
+			return nil, err
+		}
 		files, err := collectFiles(a, "description")
 		if err != nil {
 			return nil, err
@@ -390,6 +417,13 @@ are claimed by the new work package in the same request.`,
 		body["subject"] = a.String("subject")
 		links := body["_links"].(map[string]any)
 		links["project"] = hal.Ref(href("projects", pid))
+		formPath := fmt.Sprintf("/projects/%d/work_packages/form", pid)
+		if err := e.wpFields(ctx, formPath, body, a, pid); err != nil {
+			return nil, err
+		}
+		if err := e.validate(ctx, formPath, body); err != nil {
+			return nil, err
+		}
 		// Files go up without a container and are claimed by the create,
 		// so a failed upload leaves no half-made work package behind.
 		t := e.newAttacher(0)
@@ -413,12 +447,26 @@ are claimed by the new work package in the same request.`,
 			return nil, err
 		}
 		wp := hal.Flatten(res)
-		e.decorateWP(wp)
+		e.decorateWP(ctx, wp)
 		if len(t.Uploaded) > 0 {
 			wp["uploaded"] = t.Uploaded
 		}
+		men.report(wp)
 		return wp, nil
 	},
+}
+
+// wpFields applies --field, resolving names against the form at formPath.
+func (e *Env) wpFields(ctx context.Context, formPath string, body map[string]any, a Args, projectID int) error {
+	specs := rawStrings(a["field"])
+	if len(specs) == 0 {
+		return nil
+	}
+	defs, _, err := e.form(ctx, formPath, body)
+	if err != nil {
+		return err
+	}
+	return e.applyFields(ctx, body, defs, specs, projectID)
 }
 
 var wpUpdate = &Op{
@@ -430,20 +478,28 @@ concurrent edit triggers one automatic retry). Pass 'none' to clear user,
 parent, version, category, dates or estimates. --comment adds a comment in
 the same call. --project moves the work package to another project.
 
+Custom fields go by name with --field NAME=VALUE ("NAME=" clears). The
+server validates the change through its form before anything is written: a
+status the workflow does not allow from the current one fails listing the
+statuses that are, and so does any other value that is not allowed.
+
 Local images in --description or --comment, and --attach files, are
-uploaded first (see 'wp create'); a file already attached with the same name
-and size is reused, so re-running the same update attaches nothing new.`,
+uploaded after that check (see 'wp create'); a file already attached with
+the same name and size is reused, so re-running the same update attaches
+nothing new. @login in the text becomes a mention that notifies the user.`,
 	Example: `  opcli wp update 42 --status "In progress" --assignee me
   opcli wp update 42 --status Closed --comment "Fixed in v1.2"
   opcli wp update 42 --comment-file review.md --attach report.pdf
   opcli wp update 42 --due-date 2026-10-15 --estimate 6h
   opcli wp update 42 --assignee none --version none
-  opcli wp update 42 --fields '{"customField3":"ACME"}'`,
+  opcli wp update 42 --field "Customer=ACME" --field "Tags=urgent,customer"
+  opcli wp update 42 --field "Customer="          # clear a custom field`,
 	Params: append([]Param{
 		pID("Work package"),
 		{Name: "subject", Kind: String, Desc: "New title"},
 		{Name: "project", Kind: String, Desc: "Move to this project (id, identifier or name)"},
 		{Name: "comment", Kind: String, File: true, Desc: "Also add this comment (Markdown)"},
+		pInternal,
 		pAttach,
 	}, wpFieldParams...),
 	Safety: Write,
@@ -452,10 +508,46 @@ and size is reused, so re-running the same update attaches nothing new.`,
 		if err != nil {
 			return nil, err
 		}
+		men, err := e.mentionArgs(ctx, a, "description", "comment")
+		if err != nil {
+			return nil, err
+		}
 		files, err := collectFiles(a, "description", "comment")
 		if err != nil {
 			return nil, err
 		}
+		cur, err := e.C.Get(ctx, fmt.Sprintf("/work_packages/%d", id), nil)
+		if err != nil {
+			return nil, err
+		}
+		pid := intOf(hal.IDFromHref(hal.Link(cur, "project")))
+		if a.Has("project") {
+			if pid, err = e.ProjectID(ctx, a.String("project")); err != nil {
+				return nil, err
+			}
+		}
+		body, err := e.wpPayload(ctx, a, pid)
+		if err != nil {
+			return nil, err
+		}
+		if a.Has("subject") {
+			body["subject"] = a.String("subject")
+		}
+		if a.Has("project") {
+			body["_links"].(map[string]any)["project"] = hal.Ref(href("projects", pid))
+		}
+		body["lockVersion"] = cur["lockVersion"]
+		formPath := fmt.Sprintf("/work_packages/%d/form", id)
+		if err := e.wpFields(ctx, formPath, body, a, pid); err != nil {
+			return nil, err
+		}
+		onlyComment := len(body) == 2 && len(body["_links"].(map[string]any)) == 0
+		if !onlyComment {
+			if err := e.validate(ctx, formPath, body); err != nil {
+				return nil, err
+			}
+		}
+
 		t := e.newAttacher(id)
 		if !files.empty() {
 			texts, err := files.apply(ctx, t, a)
@@ -465,59 +557,54 @@ and size is reused, so re-running the same update attaches nothing new.`,
 			for p, v := range texts {
 				a[p] = v
 			}
+			if d, ok := texts["description"]; ok {
+				body["description"] = hal.Text(d)
+			}
 		}
-		var res map[string]any
-		for attempt := 0; attempt < 2; attempt++ {
-			cur, err := e.C.Get(ctx, fmt.Sprintf("/work_packages/%d", id), nil)
-			if err != nil {
-				return nil, err
-			}
-			pid := intOf(hal.IDFromHref(hal.Link(cur, "project")))
-			if a.Has("project") {
-				if pid, err = e.ProjectID(ctx, a.String("project")); err != nil {
-					return nil, err
-				}
-			}
-			body, err := e.wpPayload(ctx, a, pid)
-			if err != nil {
-				return nil, err
-			}
-			if a.Has("subject") {
-				body["subject"] = a.String("subject")
-			}
-			if a.Has("project") {
-				body["_links"].(map[string]any)["project"] = hal.Ref(href("projects", pid))
-			}
-			body["lockVersion"] = cur["lockVersion"]
-			if len(body) == 2 && len(body["_links"].(map[string]any)) == 0 {
-				res = cur // only a comment requested
-				break
-			}
+		res := cur
+		if !onlyComment {
 			q := url.Values{}
 			if !a.Bool("notify") {
 				q.Set("notify", "false")
 			}
-			res, err = e.C.JSON(ctx, "PATCH", fmt.Sprintf("/work_packages/%d", id), q, body)
-			if client.IsConflict(err) && attempt == 0 {
-				continue
+			for attempt := 0; ; attempt++ {
+				res, err = e.C.JSON(ctx, "PATCH", fmt.Sprintf("/work_packages/%d", id), q, body)
+				if !client.IsConflict(err) || attempt > 0 {
+					break
+				}
+				fresh, err := e.C.Get(ctx, fmt.Sprintf("/work_packages/%d", id), nil)
+				if err != nil {
+					return nil, err
+				}
+				body["lockVersion"] = fresh["lockVersion"]
 			}
 			if err != nil {
 				return nil, err
 			}
-			break
 		}
 		if c := a.String("comment"); c != "" {
-			if _, err := e.C.Post(ctx, fmt.Sprintf("/work_packages/%d/activities", id), map[string]any{"comment": hal.Text(c)}); err != nil {
+			if _, err := e.C.Post(ctx, fmt.Sprintf("/work_packages/%d/activities", id), commentBody(c, a)); err != nil {
 				return nil, fmt.Errorf("fields updated but adding the comment failed: %w", err)
 			}
 		}
 		wp := hal.Flatten(res)
-		e.decorateWP(wp)
+		e.decorateWP(ctx, wp)
 		if len(t.Uploaded) > 0 {
 			wp["uploaded"] = t.Uploaded
 		}
+		men.report(wp)
 		return wp, nil
 	},
+}
+
+var pInternal = Param{Name: "internal", Kind: Bool, Desc: "Internal comment, visible only to roles allowed to see internal comments (Enterprise; enabled per project)"}
+
+func commentBody(text string, a Args) map[string]any {
+	b := map[string]any{"comment": hal.Text(text)}
+	if a.Bool("internal") {
+		b["internal"] = true
+	}
+	return b
 }
 
 // wpPayload builds the create/update body from the shared field params.
@@ -665,14 +752,19 @@ var wpComment = &Op{
 	Short: "Add a comment to a work package",
 	Long: `Add a Markdown comment. Local images (![alt](shot.png)) are uploaded as
 attachments of the work package and rendered inline; relative paths resolve
-against --body-file (or the working directory). Fix a comment later with
+against --body-file (or the working directory). @login becomes a mention
+that notifies the user (the result lists "mentioned", and
+"unresolvedMentions" for what matched nobody). Fix a comment later with
 'wp comment-edit'.`,
 	Example: `  opcli wp comment 42 --body "Deployed to staging"
   git log -1 --format=%B | opcli wp comment 42 --body-file -
-  opcli wp comment 42 --body-file notes/review.md   # with ![](shot.png) inside`,
+  opcli wp comment 42 --body-file notes/review.md   # with ![](shot.png) inside
+  opcli wp comment 42 --body "@jane can you review?"
+  opcli wp comment 42 --body "Customer budget is tight" --internal`,
 	Params: []Param{
 		pID("Work package"),
 		{Name: "body", Kind: String, Required: true, File: true, Short: "b", Desc: "Comment text (Markdown)"},
+		pInternal,
 	},
 	Safety: Write,
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
@@ -681,7 +773,7 @@ against --body-file (or the working directory). Fix a comment later with
 			return nil, err
 		}
 		return e.writeComment(ctx, id, a, func(body string) (map[string]any, error) {
-			return e.C.Post(ctx, fmt.Sprintf("/work_packages/%d/activities", id), map[string]any{"comment": hal.Text(body)})
+			return e.C.Post(ctx, fmt.Sprintf("/work_packages/%d/activities", id), commentBody(body, a))
 		})
 	},
 }
@@ -718,6 +810,10 @@ through the API. Local images are handled as in 'wp comment'.`,
 // writeComment uploads the local images of --body to the work package and
 // sends the rewritten text with send.
 func (e *Env) writeComment(ctx context.Context, wpID int, a Args, send func(string) (map[string]any, error)) (any, error) {
+	men, err := e.mentionArgs(ctx, a, "body")
+	if err != nil {
+		return nil, err
+	}
 	files, err := collectFiles(a, "body")
 	if err != nil {
 		return nil, err
@@ -743,6 +839,7 @@ func (e *Env) writeComment(ctx context.Context, wpID int, a Args, send func(stri
 	if len(t.Uploaded) > 0 {
 		act["uploaded"] = t.Uploaded
 	}
+	men.report(act)
 	return act, nil
 }
 

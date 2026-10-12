@@ -1,6 +1,6 @@
 ---
 name: opcli
-description: Read and change work in an OpenProject instance from the shell with the `opcli` CLI — list and search work packages, view them with comments and history, create, update, change status along the workflow, comment (with images), relate, watch, attach files, build parent/child hierarchies (epics), log and review time, record work done after the fact (backfill), and manage projects, versions, memberships and notifications; any other API v3 endpoint through `opcli api`. Load whenever the task mentions OpenProject, work packages (WP, #1234), tasks, bugs, epics, milestones, timesheets, time entries, "imputar horas", "apuntar horas", or turning notes into OpenProject work. Use INSTEAD of calling the OpenProject API by hand.
+description: Read and change work in an OpenProject instance from the shell with the `opcli` CLI — list and search work packages, view them with comments and history, create, update (custom fields by name), change status along the workflow, comment (with images and @mentions that notify), dry-run any write with server-side validation, relate, watch, attach files, build parent/child hierarchies (epics), log and review time, record work done after the fact (backfill), and manage projects, versions, memberships and notifications; any other API v3 endpoint through `opcli api`. Load whenever the task mentions OpenProject, work packages (WP, #1234), tasks, bugs, epics, milestones, timesheets, time entries, "imputar horas", "apuntar horas", or turning notes into OpenProject work. Use INSTEAD of calling the OpenProject API by hand.
 ---
 
 # opcli — OpenProject from the shell
@@ -38,7 +38,9 @@ and may change. Every command honours `-o json`, writes included.
 | any `list` | `{total, count, items: [...]}` — `total > count` means more pages |
 | `wp get`, `project get`, `user get`, `meeting get` | one flat record |
 | `wp allowed` | `{<field>: [{id, name}, …]}`, e.g. `jq -r '.status[].name'` |
-| `wp create`, `wp update`, `wp comment`, `wp comment-edit` | the record written (+ `uploaded[]`) |
+| `wp fields` | list of `{key, name, type, required, custom, values?, valuesFrom?, help?}` |
+| `wp create`, `wp update`, `wp comment`, `wp comment-edit` | the record written (+ `uploaded[]`, `mentioned[]`, `unresolvedMentions[]`) |
+| any write with `--dry-run` | `{dryRun: true, requests: [{method, path, query?, body?, file?}], mentioned?, unresolvedMentions?}` |
 | `time log`, `time update`, `wp relation add`, `membership add` | the record created/updated, with its `id` |
 | `wp delete`, `time delete`, `notification read`, … | `{ok: true, message}` |
 | `wp backfill` | plan or result: `workPackage`, `startDate`, `dueDate`, `totalHours`, `days[]` (`date`, `hours`, `timeEntryId`), `comment` |
@@ -46,8 +48,9 @@ and may change. Every command honours `-o json`, writes included.
 Records are flattened from HAL: a link becomes its title plus an id
 (`"status": "In progress", "statusId": 7`); Markdown fields are plain strings;
 durations stay ISO 8601 (`"estimatedTime": "PT2H"`); work packages carry
-`url`, the browser link. `wp list` items are compact (no description). Chain
-steps with `jq`:
+`url`, the browser link, and their custom fields by name under
+`customFields` (`{"Customer": "ACME", "Tags": ["urgent"]}`; empty ones are
+omitted). `wp list` items are compact (no description). Chain steps with `jq`:
 
 ```sh
 ID=$(opcli wp create --subject "Spike: cache" -o json | jq -r .id)
@@ -79,6 +82,8 @@ opcli status list -o json
 opcli priority list -o json
 opcli wp allowed 42 --field status -o json        # transitions valid NOW for this WP
 opcli wp allowed 42 -o json                       # every field with a finite list of values
+opcli wp fields --project demo-project --type Task -o json   # fields of a new WP: names, types, required, values
+opcli wp fields 42 --custom -o json               # custom fields of this WP and what they accept
 opcli project assignees demo-project -o json      # who can be assigned
 opcli project categories demo-project -o json
 opcli version list --project demo-project -o json
@@ -101,6 +106,8 @@ opcli wp list --status "In progress,On hold" --sort dueDate:asc -o json
 opcli wp list --author me --responsible none --priority High -o json
 opcli wp list --version "v1.2" --project demo-project -o json
 opcli wp list --parent 42 -o json                          # direct children
+opcli wp list --project demo-project --field "Customer=ACME" --field "Billable=yes" -o json
+opcli wp list --project demo-project --field "Area=Backend,Ops" --field "Due to customer=" -o json   # "NAME=" = empty
 opcli wp list --filter '[{"dueDate":{"operator":"<t+","values":["7"]}}]' -o json
 opcli wp list --query-id 12 -o json                        # a saved query (see query list)
 opcli wp list --max 50 --page 2 -o json
@@ -122,8 +129,13 @@ opcli meeting get 7 -o json
 - `wp list` defaults: open work packages, the configured project (else every
   project), 50 results, most recently updated first. `--max 0` fetches all.
   Flags combine with AND; `--query-id` ignores the other filters.
+- `--field NAME=VALUE` filters by any field by its name, custom fields
+  included: text matches by "contains", lists, users and versions by name,
+  booleans `yes`/`no`, dates as usual. It needs a project. OpenProject cannot
+  filter by user or version custom fields: filter by something else and check
+  `customFields` with `jq`.
 - `--filter` takes raw API filters for anything without a flag (dates,
-  watchers, custom fields…): `opcli help filters` lists operators and names.
+  watchers…): `opcli help filters` lists operators and names.
 - Work packages are `#42` in OpenProject's UI; pass `42` (or `#42`).
 
 ## Markdown, images and files
@@ -165,9 +177,14 @@ opcli wp update 42 --status Closed --comment "Fixed in v1.2"
 opcli wp update 42 --assignee none --version none --due-date none
 opcli wp update 42 --subject "New title" --estimate 6h --remaining 2h --percent-done 60
 opcli wp update 42 --project other-project --type Feature
-opcli wp update 42 --fields '{"customField3":"ACME"}'
+opcli wp create --subject "Onboarding" --field "Customer=ACME" --field "Area=Backend" --field "Billable=yes"
+opcli wp update 42 --field "Tags=urgent,customer" --field "Points=8" --field "Due to customer=+14d"
+opcli wp update 42 --field "Customer="               # clear a custom field
+opcli wp update 42 --status Closed --dry-run         # validated by the server, nothing written
 opcli wp update 42 --description-file new.md --comment-file why.md
 opcli wp comment 42 --body "Deployed to staging"
+opcli wp comment 42 --body "@jane can you review the migration?"
+opcli wp comment 42 --body "Customer budget is tight" --internal
 opcli wp comment-edit 1234 --body "Deployed to production"
 opcli wp relation add 43 --type follows --to 42 --lag 2
 opcli wp relation add 43 --type relates --to 30 --description "same root cause"
@@ -185,8 +202,36 @@ opcli notification read --all
   the project's default type. `--project` falls back to the configured one.
 - `--notify` is on by default for create/update: pass `--notify=false` for
   bulk or scripted changes so nobody gets a flood of emails.
-- `--fields` merges raw JSON into the request (custom fields, links); read
-  the field names with `opcli wp allowed <id>` or `opcli api describe`.
+- **Custom fields** go by the name the UI shows: `--field NAME=VALUE`,
+  repeatable. `opcli wp fields` lists the names, types, whether they are
+  required and the allowed values (and the instance's help text for each).
+  Values are converted by type: lists and multi-lists by option name
+  (`"Tags=a,b"`), users like `--assignee`, versions by name, numbers (`3,5` or
+  `3.5`), booleans (`yes`/`no`, `true`/`false`, `sí`), dates and durations in
+  the usual formats; `"NAME="` clears. A raw JSON value (`[…]`, `{…}`) is
+  sent as is. `--fields` merges raw JSON into the request with API keys
+  (`customField3`); prefer `--field`.
+- **Every create and update is validated by the server first** (its form
+  endpoint), before any file is uploaded: a status the workflow does not allow
+  from the current one, a missing required field or a value that is not
+  allowed fails with `the server would reject this, nothing was written` and
+  the allowed values. Read them and retry with one of them.
+- **`--dry-run`** on any write prints the requests it would send and sends
+  none; reads and that server-side validation still run, so a clean dry run of
+  `wp create`/`wp update` means the server would accept it. Show it to the
+  user before a write they have not confirmed in detail. Files are listed,
+  not uploaded.
+- **Mentions**: `@login` in a description or comment becomes a real mention
+  that notifies the user; a plain "@name" in OpenProject notifies nobody. It
+  also accepts a first name, last name or full name without spaces when it
+  names exactly one user (only admins can see logins). What matches nobody,
+  or more than one user, is left as typed and listed in
+  `unresolvedMentions`: fix the name and edit the text, or tell the user.
+  `@` inside code and in email addresses is left alone.
+- `--internal` (on `wp comment`, and on `wp update` for its `--comment`)
+  makes the comment visible only to roles allowed to see internal comments.
+  It needs an Enterprise plan and the project setting; otherwise the server
+  says so.
 - `wp comment-edit` takes the **activity** id from `wp activities`. Comments
   cannot be deleted through the API.
 - `wp relation add 43 --type blocks --to 42`: #43 blocks #42. Types: relates,
@@ -316,7 +361,7 @@ opcli api request DELETE work_packages/42 --yes
 ```
 
 They ask on a terminal. Without one (your case) they fail with exit 1 unless
-you pass `--yes`. Pass it only after the user confirmed that exact deletion:
+you pass `--yes`. `--dry-run` shows what would be deleted without asking. Pass it only after the user confirmed that exact deletion:
 nothing deleted can be recovered. Removing a watcher is not destructive.
 
 ## Not possible with opcli
@@ -327,9 +372,11 @@ Say so instead of improvising:
   or the author of anything;
 - ordering cards on a board or moving them between board columns other than
   by changing the field the column is based on (e.g. `--status`);
-- creating or editing meetings, users, groups, roles, types, statuses or
-  workflows (admin settings): read-only or web UI;
-- custom fields have no dedicated flags: `--fields` with the raw name.
+- creating or editing meetings (the API allows it: `opcli api endpoints
+  meeting`), users, groups, roles, types, statuses, custom field definitions
+  or workflows (admin settings): read-only or web UI;
+- filtering by user or version custom fields (OpenProject has no filter for
+  them).
 
 Some of these are reachable through `opcli api` if the user's permissions
 allow it: check `api endpoints` and ask before writing.
@@ -339,6 +386,11 @@ allow it: check `api endpoints` and ask before writing.
 Errors go to stderr as one line (`Error: …`) and exit 1. Only a wrong flag or
 argument also prints the command usage.
 
+- `openproject: HTTP 422: the server would reject this, nothing was written
+  (… Allowed: a, b.)`: the form check of a create/update failed; nothing
+  changed. Pick one of the allowed values (or fill the required field).
+- `field "X": "y" is not allowed; allowed: …` / `unknown field "X" here;
+  custom fields: …`: a `--field` name or value; see `wp fields`.
 - `openproject: HTTP n: message (details)`:
   - `422` naming a field (`Status is invalid`, `Type is not set to one of the
     allowed values`): check `wp allowed <id>` / `type list --project`;

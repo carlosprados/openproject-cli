@@ -49,6 +49,7 @@ Generated with `opcli docs`. Global flags: `--config`, `--url`, `--api-key`, `-o
 | `opcli wp comment-edit` | writes | Replace the text of a comment |
 | `opcli wp create` | writes | Create a work package |
 | `opcli wp delete` | **destructive** | Delete a work package (irreversible, children included) |
+| `opcli wp fields` | read-only | List the fields a work package takes: names, types, required, allowed values |
 | `opcli wp get` | read-only | Show a work package with description, relations, children and attachments |
 | `opcli wp list` | read-only | List and search work packages with filters |
 | `opcli wp relation add` | writes | Relate two work packages |
@@ -804,7 +805,6 @@ Effect: writes
 | `--comment` | string |  | Comment on each time entry (default: the subject) |
 | `--reason` | string |  | Why it is registered late; appended to the audit comment |
 | `--include-weekends` | bool |  | Log time on every day of the range, not only working days |
-| `--dry-run` | bool |  | Show the plan without writing anything |
 | `--notify` | bool | `false` | Send email notifications for these changes |
 
 ```sh
@@ -821,7 +821,9 @@ Add a comment to a work package
 
 Add a Markdown comment. Local images (![alt](shot.png)) are uploaded as
 attachments of the work package and rendered inline; relative paths resolve
-against --body-file (or the working directory). Fix a comment later with
+against --body-file (or the working directory). @login becomes a mention
+that notifies the user (the result lists "mentioned", and
+"unresolvedMentions" for what matched nobody). Fix a comment later with
 'wp comment-edit'.
 
 Effect: writes
@@ -830,11 +832,14 @@ Effect: writes
 |---|---|---|---|
 | `<id>` (arg) | string |  | **required** Work package id |
 | `--body` | string |  | **required** Comment text (Markdown) |
+| `--internal` | bool |  | Internal comment, visible only to roles allowed to see internal comments (Enterprise; enabled per project) |
 
 ```sh
   opcli wp comment 42 --body "Deployed to staging"
   git log -1 --format=%B | opcli wp comment 42 --body-file -
   opcli wp comment 42 --body-file notes/review.md   # with ![](shot.png) inside
+  opcli wp comment 42 --body "@jane can you review?"
+  opcli wp comment 42 --body "Customer budget is tight" --internal
 ```
 
 ## opcli wp comment-edit
@@ -867,11 +872,17 @@ the configured default and the type to default_type from the config, else
 the project's default type. Long descriptions are easier
 to pass with --description-file (use - for stdin).
 
+Custom fields and any other field go by name with --field NAME=VALUE (see
+'opcli wp fields' for the names and allowed values). Before anything is
+written the server validates the whole request through its form, so a
+missing required field or a value that is not allowed fails with the list
+of valid values, and --dry-run shows exactly what would be sent.
+
 Local images in the description (![alt](shot.png)) are uploaded as
 attachments and the link is rewritten so they render; relative paths resolve
 against the --description-file (or the working directory). Remote URLs are
-left alone. Every file is checked before anything is written, and the files
-are claimed by the new work package in the same request.
+left alone. The files are claimed by the new work package in the same
+request. @login in the description becomes a mention that notifies the user.
 
 Effect: writes
 
@@ -894,13 +905,15 @@ Effect: writes
 | `--estimate` | string |  | Estimated work: 4, 1.5, 90m, 2h30m or PT2H ('none' to clear) |
 | `--remaining` | string |  | Remaining work, same formats as --estimate |
 | `--percent-done` | int |  | % complete (0-100), when progress is work-based |
-| `--fields` | string |  | Raw JSON object merged into the request, for custom fields or anything else, e.g. {"customField3":"x"} |
+| `--field` | list |  | Any field by its name, NAME=VALUE (repeatable): custom fields such as "Customer=ACME"; lists, users and versions by name; several values comma-separated; "NAME=" clears (see 'opcli wp fields') |
+| `--fields` | string |  | Raw JSON object merged into the request, e.g. {"customField3":"x"}; prefer --field |
 | `--notify` | bool | `true` | Send email notifications for this change |
 
 ```sh
   opcli wp create --subject "Fix login timeout" --type Bug --priority High
   opcli wp create -p demo-project --subject "Write docs" --assignee me --due-date +7d
   opcli wp create --subject "Sub-task" --parent 42 --estimate 3h
+  opcli wp create --subject "Onboarding" --field "Customer=ACME" --field "Area=Backend"
   opcli wp create --subject "Crash on save" --type Bug --description-file bug.md --attach crash.log
   cat spec.md | opcli wp create --subject "Epic: SSO" --type Epic --description-file -
 ```
@@ -917,6 +930,35 @@ Effect: **destructive**
 
 ```sh
   opcli wp delete 42
+```
+
+## opcli wp fields
+
+List the fields a work package takes: names, types, required, allowed values
+
+List the writable fields of a work package as the server's form describes
+them, custom fields included: the name to use with --field, the type, whether
+it is required, the allowed values when they are a finite list, and the help
+text configured in the instance.
+
+With an id it describes that work package (statuses are the transitions the
+workflow allows from its current status); without one it describes a new
+work package of --type in --project.
+
+Effect: read-only
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | Work package id (omit to describe a new one) |
+| `--project` | string |  | Project of the new work package (default: configured project) |
+| `--type` | string |  | Type of the new work package (default: as in wp create) |
+| `--custom` | bool |  | Only custom fields |
+
+```sh
+  opcli wp fields --project demo-project --type Task
+  opcli wp fields 42
+  opcli wp fields 42 --custom
+  opcli wp fields -p demo-project -o json | jq -r '.items[] | select(.required) | .name'
 ```
 
 ## opcli wp get
@@ -952,6 +994,11 @@ status names/ids ("New,In progress"). --assignee/--author/--responsible accept
 me, none, a login, email, name or id. --search does full-text search over
 subject, description and comments.
 
+--field filters by any field by its name, custom fields included
+("Customer=ACME"; text fields match by "contains", lists, users and versions
+by name, "NAME=" finds empty ones). It needs a project. Custom fields come
+back by name under "customFields".
+
 --filter takes raw API filters (JSON) for anything not covered by flags, e.g.
   [{"dueDate":{"operator":"<t+","values":["7"]}}]
 See 'opcli help filters' for operators. --query-id runs a saved query instead.
@@ -970,6 +1017,7 @@ Effect: read-only
 | `--version` | string |  | Target version name or id (name needs a project) |
 | `--parent` | string |  | Only direct children of this work package id |
 | `--search` | string |  | Full-text search in subject, description and comments |
+| `--field` | list |  | Filter by any field by name, NAME=VALUE (repeatable): "Customer=ACME", "Area=Backend,Ops"; "NAME=" means empty; needs a project |
 | `--filter` | string |  | Extra raw API filters as a JSON array (see 'opcli help filters') |
 | `--sort` | string | `updatedAt:desc` | Sort spec field:asc\|desc, comma-separated (id, subject, updatedAt, dueDate, priority, status...) |
 | `--query-id` | int |  | Run a saved query by id (other filters are ignored) |
@@ -982,6 +1030,7 @@ Effect: read-only
   opcli wp list -p demo-project --type Bug --status all
   opcli wp list --search "login timeout" --max 10
   opcli wp list --status "In progress,On hold" --sort dueDate:asc
+  opcli wp list -p demo-project --field "Customer=ACME" --field "Billable=yes"
   opcli wp list --filter '[{"dueDate":{"operator":"<t+","values":["7"]}}]'
   opcli wp list --query-id 12                    # run a saved query
   opcli wp list --assignee me -o json            # machine-readable
@@ -1048,9 +1097,15 @@ concurrent edit triggers one automatic retry). Pass 'none' to clear user,
 parent, version, category, dates or estimates. --comment adds a comment in
 the same call. --project moves the work package to another project.
 
+Custom fields go by name with --field NAME=VALUE ("NAME=" clears). The
+server validates the change through its form before anything is written: a
+status the workflow does not allow from the current one fails listing the
+statuses that are, and so does any other value that is not allowed.
+
 Local images in --description or --comment, and --attach files, are
-uploaded first (see 'wp create'); a file already attached with the same name
-and size is reused, so re-running the same update attaches nothing new.
+uploaded after that check (see 'wp create'); a file already attached with
+the same name and size is reused, so re-running the same update attaches
+nothing new. @login in the text becomes a mention that notifies the user.
 
 Effect: writes
 
@@ -1060,6 +1115,7 @@ Effect: writes
 | `--subject` | string |  | New title |
 | `--project` | string |  | Move to this project (id, identifier or name) |
 | `--comment` | string |  | Also add this comment (Markdown) |
+| `--internal` | bool |  | Internal comment, visible only to roles allowed to see internal comments (Enterprise; enabled per project) |
 | `--attach` | list |  | Local file to attach (repeatable); a file already attached with the same name and size is not uploaded again |
 | `--type` | string |  | Type name or id (Task, Bug, Feature, Epic, Milestone...); default: config default_type, else the project's default |
 | `--description` | string |  | Description in Markdown |
@@ -1075,7 +1131,8 @@ Effect: writes
 | `--estimate` | string |  | Estimated work: 4, 1.5, 90m, 2h30m or PT2H ('none' to clear) |
 | `--remaining` | string |  | Remaining work, same formats as --estimate |
 | `--percent-done` | int |  | % complete (0-100), when progress is work-based |
-| `--fields` | string |  | Raw JSON object merged into the request, for custom fields or anything else, e.g. {"customField3":"x"} |
+| `--field` | list |  | Any field by its name, NAME=VALUE (repeatable): custom fields such as "Customer=ACME"; lists, users and versions by name; several values comma-separated; "NAME=" clears (see 'opcli wp fields') |
+| `--fields` | string |  | Raw JSON object merged into the request, e.g. {"customField3":"x"}; prefer --field |
 | `--notify` | bool | `true` | Send email notifications for this change |
 
 ```sh
@@ -1084,7 +1141,8 @@ Effect: writes
   opcli wp update 42 --comment-file review.md --attach report.pdf
   opcli wp update 42 --due-date 2026-10-15 --estimate 6h
   opcli wp update 42 --assignee none --version none
-  opcli wp update 42 --fields '{"customField3":"ACME"}'
+  opcli wp update 42 --field "Customer=ACME" --field "Tags=urgent,customer"
+  opcli wp update 42 --field "Customer="          # clear a custom field
 ```
 
 ## opcli wp watcher add

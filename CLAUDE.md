@@ -39,12 +39,20 @@ by design: agents drive it from the shell, guided by the embedded skill
   (`registerGroup`) are CLI parents; nested groups use spaces ("wp relation").
   `attach.go`: `--attach` and local Markdown images (upload, dedupe by name
   and size, rewrite to `/api/v3/attachments/{id}/content`; on create they are
-  uploaded containerless and claimed by the POST).
+  uploaded containerless and claimed by the POST). `fields.go`: the work
+  package form schema → `fieldDef`; `--field NAME=VALUE` conversion by type,
+  `wp fields`, `customFields` by name on reads, `--field` filters, and
+  `validate` (every create/update goes through the form before any upload or
+  write). `mentions.go`: `@login` → `<mention>` tags.
 - `internal/cli` — generates Cobra commands from ops: params → flags
   (snake_case → kebab-case), `File` params get `--x-file` (path or `-`; the
   file's directory goes to `ops.FileDirKey` for relative images), enums get
   shell completion, output via `-o text|json`. `Destructive` ops get `--yes`
   and a prompt (`Op.NeedsConfirm`); without a TTY they fail unless `--yes`.
+  Write and destructive ops get `--dry-run`: `client.Recorder` records every
+  request except reads, `…/form` and `/render/` (so validation still runs),
+  and the CLI prints the recorded requests; `wp backfill` checks `Env.DryRun`
+  and returns its own plan.
   Usage is printed only for flag/argument errors.
 - `internal/skill` + `internal/cli/skill.go` — `opcli skill install|show|path`;
   `SKILL.md` is embedded with `go:embed`, so the installed skill matches the
@@ -70,6 +78,20 @@ by design: agents drive it from the shell, guided by the embedded skill
 - `PATCH /activities/{id}` takes `comment` as a plain string, although the
   spec says object; `POST /work_packages/{id}/activities` takes `{raw}`.
 - Activity `user` links carry no title; `nameUser` resolves names.
+- `POST /projects/{id}/work_packages/form` and `/work_packages/{id}/form`
+  validate without saving (workflow transitions included) and return the
+  schema with `allowedValues` (embedded, an array of links, or an href for
+  users). `GET /work_packages/schemas/{project}-{type}` has names but no
+  allowed values.
+- Custom fields: link-type values go in `_links` (`location: "_links"`),
+  the rest in the body; a Link custom field is a plain string. User and
+  version custom fields cannot be filtered ("Cf N filter does not exist").
+- Mentions are stored as `<mention class="mention" data-id="5"
+  data-type="user" data-text="@Name">@Name</mention>`; a plain `@login`
+  notifies nobody. Only admins see `login`/`email` of other users, and
+  `/principals` has no login filter for others.
+- Internal comments (`"internal": true` on POST activities) need an
+  Enterprise plan and the project setting.
 
 ## Development rules
 
