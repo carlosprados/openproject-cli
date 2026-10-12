@@ -169,7 +169,10 @@ func (c *Client) Raw(ctx context.Context, method, path string, query url.Values,
 
 		resp, err := c.HTTP.Do(req)
 		if err != nil {
-			return nil, "", fmt.Errorf("%s %s: %w", method, target, err)
+			if ctx.Err() != nil {
+				return nil, "", ctx.Err()
+			}
+			return nil, "", fmt.Errorf("cannot reach OpenProject at %s (check the URL, the network or the VPN): %w", c.BaseURL, err)
 		}
 		data, err := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()

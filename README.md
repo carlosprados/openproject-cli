@@ -1,15 +1,16 @@
-# opcli — OpenProject CLI and MCP server
+# opcli — OpenProject from the command line
 
 `opcli` puts [OpenProject](https://www.openproject.org/) in your terminal and in
-your AI agent. One Go binary, two faces:
+your AI agent. One Go binary:
 
 - a **CLI** for humans, fully self-documented (`--help` with examples on every
-  command, help topics, a built-in guide);
-- an **MCP server** for AI agents (Claude Code, Claude Desktop, Cursor, Gemini
-  CLI...) with **tools, resources and prompts**.
+  command, help topics);
+- an embedded **agent skill** (`opcli skill install`) that teaches coding
+  agents such as Claude Code to drive that same CLI correctly: commands, JSON
+  shapes, names instead of ids, workflows and pitfalls.
 
-Both faces are generated from the same command registry, so they can never
-drift apart: every CLI command *is* an MCP tool with the same parameters.
+Agents use the shell, not a protocol server: one surface to maintain, and the
+skill is tested against the real command tree so it never drifts.
 
 ```text
 $ opcli wp list --assignee me --project all
@@ -26,8 +27,15 @@ Tested against OpenProject 17.8 (API v3).
 ## Features
 
 - **Work packages**: list/search with filters, view (description, relations,
-  children, attachments, history), create, update, delete, comment, allowed
-  values (workflow-aware status transitions), relations, watchers, attachments.
+  children, attachments, history), create, update, delete, comment and edit
+  comments, allowed values (workflow-aware status transitions), relations,
+  watchers, attachments, parent/child hierarchies.
+- **Markdown with images**: `![shot](shot.png)` in a description or comment is
+  uploaded as an attachment and rendered; `--attach` sends files along with a
+  create or update (on create they are claimed atomically by the new work
+  package).
+- **Backfill**: `opcli wp backfill` records work done without planning or
+  logging — real dates, hours spread over working days, an audit comment.
 - **Time tracking**: log, list with totals and grouping (day/project/wp/activity/user), update, delete.
 - **Projects, versions, memberships, users, notifications, saved queries, meetings**,
   plus reference data (statuses, types, priorities, roles).
@@ -38,8 +46,9 @@ Tested against OpenProject 17.8 (API v3).
   searches an embedded OpenAPI catalogue of ~300 operations and calls any of them.
 - **Agent-friendly output**: `-o json` gives flat records (HAL links collapsed to
   `"status": "In progress", "statusId": 7`), lean listings, `{total,count,items}` envelopes.
-- **Safe for agents**: MCP tool annotations (read-only / destructive), `--read-only`
-  server mode, lock versions and retries handled internally.
+- **Safe for agents and scripts**: `-o json` on every command, writes included;
+  destructive commands fail without a terminal unless `--yes`; lock versions
+  and retries handled internally; one-line errors that name the fix.
 
 ## Install
 
@@ -77,7 +86,7 @@ Everything is discoverable from the binary itself:
 opcli --help              # command map
 opcli wp --help           # a group
 opcli wp list --help      # flags + examples
-opcli guide               # concepts, conventions, recipes
+opcli skill show          # the agent guide: concepts, recipes, pitfalls
 opcli help filters        # raw API filter operators
 opcli help output         # JSON shapes
 ```
@@ -100,24 +109,22 @@ opcli api describe POST /api/v3/news && opcli api request POST news --body-file 
 
 Full reference: [docs/commands.md](docs/commands.md) (generated with `opcli docs`).
 
-## MCP server
+## AI agents
 
 ```sh
-claude mcp add openproject -- opcli mcp serve          # Claude Code
-opcli mcp config                                       # JSON snippet for other clients
-opcli mcp serve --read-only                            # no tool that modifies data
+opcli skill install          # ~/.claude/skills/opcli/SKILL.md (Claude Code)
+opcli skill install --repo   # ./.claude/skills/opcli/SKILL.md, this repository only
+opcli skill show             # print it, for any other agent
 ```
 
-What the server exposes (`opcli mcp tools`, `opcli mcp resources`):
+The skill is embedded in the binary, so it always matches it: re-run
+`opcli skill install --force` after upgrading (`task install` does it). It
+covers every command, the JSON shapes, Markdown and images, the destructive
+`--yes` rule, what opcli cannot do, the errors and recipes for common requests
+(my day, triage, status report, logging time from free text, timesheet review,
+turning notes into work packages).
 
-| Primitive | What |
-|---|---|
-| **Tools** (52) | One per CLI command: `op_list_work_packages`, `op_update_work_package`, `op_log_time`, `op_api_request`... Flags map to snake_case params (`--due-date` → `due_date`). Annotated read-only / destructive. |
-| **Resources** | `openproject://guide`, `me`, `catalog` (statuses, types, priorities, roles, activities), `projects`, `my/work_packages`, `my/time_entries`, `my/notifications`, `api/endpoints`; templates `projects/{project}`, `projects/{project}/work_packages`, `work_packages/{id}`, `work_packages/{id}/activities`. |
-| **Prompts** | `my_work`, `triage_work_package`, `project_status_report`, `log_time` (free text → time entries), `timesheet_review`, `draft_work_package`. |
-
-Resources and prompts are conveniences over the same operations the tools
-expose, so clients that only support tools lose nothing.
+The MCP server of v0.3 and earlier is gone: stay on v0.3.0 if you need it.
 
 ## Architecture
 
@@ -125,18 +132,17 @@ expose, so clients that only support tools lose nothing.
 cmd/opcli/   main package
 internal/
   ops/        command registry: one Op = params + help + safety + handler
-  cli/        builds the Cobra tree from ops (+ config, mcp, guide, docs, help topics)
-  mcpserver/  builds MCP tools from ops (+ resources, prompts) — official go-sdk
+  cli/        builds the Cobra tree from ops (+ config, skill, docs, help topics)
+  skill/      SKILL.md, embedded in the binary
   client/     HTTP client: API key auth, retries, error decoding, paging, uploads
   hal/        HAL+JSON flattening, ISO 8601 durations
   spec/       embedded OpenAPI spec index for `opcli api`
   config/     Viper-based configuration
-  guide/      usage guide shared by `opcli guide` and MCP
 ```
 
-Adding a capability means adding one `Op` in `internal/ops`; the CLI command,
-its help, the MCP tool and its JSON schema all follow. See [CLAUDE.md](CLAUDE.md)
-for the development rules.
+Adding a capability means adding one `Op` in `internal/ops` and documenting it
+in `SKILL.md` in the same change; `go test ./internal/cli/` fails otherwise.
+See [CLAUDE.md](CLAUDE.md) for the development rules.
 
 ## Development
 

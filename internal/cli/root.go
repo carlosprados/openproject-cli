@@ -1,6 +1,6 @@
 // Package cli builds the opcli Cobra command tree. Domain commands are
-// generated from internal/ops; this package adds setup commands (config,
-// mcp, guide, docs), help topics and output handling.
+// generated from internal/ops; this package adds local commands (config,
+// skill, docs), help topics and output handling.
 package cli
 
 import (
@@ -13,7 +13,6 @@ import (
 
 	"github.com/carlosprados/openproject-cli/internal/client"
 	"github.com/carlosprados/openproject-cli/internal/config"
-	"github.com/carlosprados/openproject-cli/internal/guide"
 	"github.com/carlosprados/openproject-cli/internal/ops"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -66,25 +65,30 @@ Start here:
   opcli config init --url https://op.example.com --api-key <key>
   opcli whoami
   opcli wp list --assignee me --project all
-  opcli guide                  # concepts, conventions and recipes
 
 References are resolved by name (projects, users, statuses, types...), so
 you rarely need ids. Output is a table by default and JSON with -o json.
+'opcli api' reaches any endpoint that has no dedicated command.
 
-Every command is also an MCP tool: run 'opcli mcp serve' and connect your
-AI client ('opcli mcp config' prints the snippet). 'opcli api' reaches any
-endpoint of the API that has no dedicated command.`
+Configuration: ~/.openproject.yaml or OPENPROJECT_* variables ('opcli help auth').
+
+AI agents read the embedded skill instead of --help: 'opcli skill install'
+puts it in ~/.claude/skills/opcli ('opcli skill show' prints it).`
 
 // NewRoot builds the root command.
 func NewRoot(b BuildInfo) *cobra.Command {
 	st := &state{v: viper.New(), build: b}
 	root := &cobra.Command{
 		Use:           "opcli",
-		Short:         "OpenProject CLI and MCP server",
+		Short:         "OpenProject from the command line, for humans and AI agents",
 		Long:          rootLong,
 		Version:       b.Version,
-		SilenceUsage:  true,
 		SilenceErrors: true,
+		// Flags and arguments are validated before this hook: usage is
+		// printed for those errors only, not for API or config failures.
+		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+			cmd.SilenceUsage = true
+		},
 	}
 	root.SetVersionTemplate(fmt.Sprintf("opcli %s (commit %s, built %s)\n", b.Version, b.Commit, b.Date))
 
@@ -103,10 +107,10 @@ func NewRoot(b BuildInfo) *cobra.Command {
 	root.AddGroup(
 		&cobra.Group{ID: "work", Title: "Work commands:"},
 		&cobra.Group{ID: "ref", Title: "Reference data:"},
-		&cobra.Group{ID: "tools", Title: "Setup, AI and raw API:"},
+		&cobra.Group{ID: "tools", Title: "Setup, agent skill and raw API:"},
 	)
 	addOps(root, st)
-	for _, c := range []*cobra.Command{configCmd(st), mcpCmd(st), guideCmd(), docsCmd()} {
+	for _, c := range []*cobra.Command{configCmd(st), skillCmd(), docsCmd()} {
 		c.GroupID = "tools"
 		root.AddCommand(c)
 	}
@@ -204,15 +208,4 @@ current directory > config file. See 'opcli help auth'.`,
 	}
 	c.AddCommand(initCmd, showCmd)
 	return c
-}
-
-func guideCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "guide",
-		Short: "Print the usage guide: concepts, conventions and recipes",
-		Long:  "Print the usage guide (Markdown). The same text is served to AI agents as the MCP resource openproject://guide.",
-		Run: func(cmd *cobra.Command, _ []string) {
-			fmt.Fprint(cmd.OutOrStdout(), guide.Text)
-		},
-	}
 }

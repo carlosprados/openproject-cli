@@ -29,7 +29,6 @@ demo-project) or name (partial names work if unambiguous).`,
 var projectStatuses = []string{"not_started", "on_track", "at_risk", "off_track", "finished", "discontinued"}
 
 var projList = &Op{
-	Tool:    "op_list_projects",
 	Cmd:     []string{"project", "list"},
 	Aliases: []string{"ls"},
 	Short:   "List projects",
@@ -75,7 +74,6 @@ func trimProject(p map[string]any) {
 }
 
 var projGet = &Op{
-	Tool:    "op_get_project",
 	Cmd:     []string{"project", "get"},
 	Aliases: []string{"view", "show"},
 	Short:   "Show a project",
@@ -107,7 +105,6 @@ var projFieldParams = []Param{
 }
 
 var projCreate = &Op{
-	Tool:  "op_create_project",
 	Cmd:   []string{"project", "create"},
 	Short: "Create a project",
 	Long:  `Create a project. The identifier is derived from the name when omitted.`,
@@ -140,7 +137,6 @@ var projCreate = &Op{
 }
 
 var projUpdate = &Op{
-	Tool:  "op_update_project",
 	Cmd:   []string{"project", "update"},
 	Short: "Update a project (name, description, status, archive...)",
 	Example: `  opcli project update demo-project --status at_risk --status-explanation "Vendor late"
@@ -221,7 +217,6 @@ func slugify(s string) string {
 }
 
 var projDelete = &Op{
-	Tool:    "op_delete_project",
 	Cmd:     []string{"project", "delete"},
 	Short:   "Delete a project and everything in it (irreversible)",
 	Example: `  opcli project delete old-stuff`,
@@ -240,7 +235,6 @@ var projDelete = &Op{
 }
 
 var projAssignees = &Op{
-	Tool:    "op_list_project_assignees",
 	Cmd:     []string{"project", "assignees"},
 	Short:   "List users that can be assigned work packages in a project",
 	Example: `  opcli project assignees demo-project`,
@@ -256,7 +250,6 @@ var projAssignees = &Op{
 }
 
 var projCategories = &Op{
-	Tool:    "op_list_project_categories",
 	Cmd:     []string{"project", "categories"},
 	Short:   "List work package categories of a project",
 	Example: `  opcli project categories demo-project`,
@@ -274,7 +267,6 @@ var projCategories = &Op{
 var versionStatuses = []string{"open", "locked", "closed"}
 
 var verList = &Op{
-	Tool:    "op_list_versions",
 	Cmd:     []string{"version", "list"},
 	Aliases: []string{"ls"},
 	Short:   "List versions of a project (or all visible versions with --project all)",
@@ -304,7 +296,6 @@ var verParams = []Param{
 }
 
 var verCreate = &Op{
-	Tool:    "op_create_version",
 	Cmd:     []string{"version", "create"},
 	Short:   "Create a version in a project",
 	Example: `  opcli version create -p demo-project --name "v1.2" --end-date 2026-11-30`,
@@ -333,7 +324,6 @@ var verCreate = &Op{
 }
 
 var verUpdate = &Op{
-	Tool:    "op_update_version",
 	Cmd:     []string{"version", "update"},
 	Short:   "Update a version (dates, status, name...)",
 	Example: `  opcli version update 4 --status closed`,
@@ -380,7 +370,6 @@ func versionPayload(a Args) (map[string]any, error) {
 var memColumns = []Column{{Header: "ID", Key: "id"}, {Header: "PROJECT", Key: "project"}, {Header: "PRINCIPAL", Key: "principal"}, {Header: "ROLES", Key: "roles"}}
 
 var memList = &Op{
-	Tool:    "op_list_memberships",
 	Cmd:     []string{"membership", "list"},
 	Aliases: []string{"ls"},
 	Short:   "List memberships, optionally by project and/or user",
@@ -413,7 +402,6 @@ var memList = &Op{
 }
 
 var memCreate = &Op{
-	Tool:    "op_create_membership",
 	Cmd:     []string{"membership", "add"},
 	Aliases: []string{"create"},
 	Short:   "Add a user or group to a project with one or more roles",
@@ -458,7 +446,6 @@ var memCreate = &Op{
 }
 
 var memUpdate = &Op{
-	Tool:    "op_update_membership",
 	Cmd:     []string{"membership", "update"},
 	Short:   "Replace the roles of a membership",
 	Example: `  opcli membership update 12 --roles "Project admin"`,
@@ -507,7 +494,6 @@ func (e *Env) roleRefs(ctx context.Context, refs []string) ([]any, error) {
 }
 
 var memDelete = &Op{
-	Tool:    "op_delete_membership",
 	Cmd:     []string{"membership", "delete"},
 	Aliases: []string{"rm"},
 	Short:   "Remove a membership (the user loses access to the project)",

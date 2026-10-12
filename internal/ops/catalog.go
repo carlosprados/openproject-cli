@@ -22,7 +22,6 @@ func init() {
 }
 
 var statusList = &Op{
-	Tool:    "op_list_statuses",
 	Cmd:     []string{"status", "list"},
 	Aliases: []string{"ls"},
 	Short:   "List all work package statuses",
@@ -35,7 +34,6 @@ var statusList = &Op{
 }
 
 var typeList = &Op{
-	Tool:    "op_list_types",
 	Cmd:     []string{"type", "list"},
 	Aliases: []string{"ls"},
 	Short:   "List work package types, globally or enabled in a project",
@@ -57,7 +55,6 @@ var typeList = &Op{
 }
 
 var priorityList = &Op{
-	Tool:    "op_list_priorities",
 	Cmd:     []string{"priority", "list"},
 	Aliases: []string{"ls"},
 	Short:   "List work package priorities",
@@ -69,7 +66,6 @@ var priorityList = &Op{
 }
 
 var roleList = &Op{
-	Tool:    "op_list_roles",
 	Cmd:     []string{"role", "list"},
 	Aliases: []string{"ls"},
 	Short:   "List roles",
@@ -81,7 +77,6 @@ var roleList = &Op{
 }
 
 var queryList = &Op{
-	Tool:    "op_list_queries",
 	Cmd:     []string{"query", "list"},
 	Aliases: []string{"ls"},
 	Short:   "List saved work package queries; run one with 'opcli wp list --query-id <id>'",
@@ -117,7 +112,6 @@ var queryList = &Op{
 }
 
 var meetingList = &Op{
-	Tool:    "op_list_meetings",
 	Cmd:     []string{"meeting", "list"},
 	Aliases: []string{"ls"},
 	Short:   "List meetings",
@@ -142,7 +136,6 @@ var meetingList = &Op{
 }
 
 var meetingGet = &Op{
-	Tool:    "op_get_meeting",
 	Cmd:     []string{"meeting", "get"},
 	Aliases: []string{"view", "show"},
 	Short:   "Show a meeting with its agenda items",

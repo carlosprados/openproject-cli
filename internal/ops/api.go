@@ -35,7 +35,6 @@ The catalogue comes from the OpenAPI spec embedded in the binary (OpenProject
 }
 
 var apiRequest = &Op{
-	Tool:    "op_api_request",
 	Cmd:     []string{"api", "request"},
 	Aliases: []string{"call", "raw"},
 	Short:   "Call any API v3 endpoint and print the JSON answer",
@@ -45,7 +44,8 @@ parameters go in --query key=value (repeatable); JSON values such as
 filters are passed verbatim. --flatten simplifies HAL answers (links become
 "name"/"nameId" pairs, collections become their elements).
 
-In read-only MCP mode only GET is allowed.`,
+DELETE asks for confirmation (--yes without a terminal). POST, PATCH and
+PUT write too: read the contract with 'opcli api describe' first.`,
 	Example: `  opcli api request GET /api/v3/configuration
   opcli api request GET work_packages --query 'filters=[{"status":{"operator":"o","values":[]}}]' --query pageSize=5 --flatten
   opcli api request POST /api/v3/render/markdown --body '"**bold**"'
@@ -58,13 +58,12 @@ In read-only MCP mode only GET is allowed.`,
 		{Name: "body", Kind: String, File: true, Desc: "JSON request body"},
 		{Name: "flatten", Kind: Bool, Desc: "Simplify HAL output"},
 	},
-	Safety:       Destructive,
-	ReadOnlySafe: true,
+	Safety: Destructive,
+	ConfirmIf: func(a Args) bool {
+		return strings.EqualFold(a.String("method"), http.MethodDelete)
+	},
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
 		method := strings.ToUpper(a.String("method"))
-		if e.ReadOnly && method != http.MethodGet {
-			return nil, fmt.Errorf("server is in read-only mode: only GET requests are allowed")
-		}
 		q := url.Values{}
 		// Strings() splits on commas, which would break JSON values: read raw.
 		for _, kv := range rawStrings(a["query"]) {
@@ -149,7 +148,6 @@ func (e *Env) spec(ctx context.Context, live bool) (*spec.Spec, error) {
 var pLive = Param{Name: "live", Kind: Bool, Desc: "Use the spec served by the configured instance instead of the embedded one"}
 
 var apiEndpoints = &Op{
-	Tool:    "op_api_list_endpoints",
 	Cmd:     []string{"api", "endpoints"},
 	Aliases: []string{"ls", "list"},
 	Short:   "Search the catalogue of API v3 endpoints",
@@ -178,7 +176,6 @@ var apiEndpoints = &Op{
 }
 
 var apiDescribe = &Op{
-	Tool:    "op_api_describe_endpoint",
 	Cmd:     []string{"api", "describe"},
 	Aliases: []string{"doc", "explain"},
 	Short:   "Show parameters, body fields and examples of an endpoint",

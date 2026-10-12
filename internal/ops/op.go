@@ -1,11 +1,7 @@
 // Package ops is the single source of truth for everything opcli can do.
 //
-// Each Op declares its parameters, help text, safety class and handler once.
-// internal/cli turns every Op into a Cobra command (params → flags) and
-// internal/mcpserver turns the very same Op into an MCP tool (params → JSON
-// schema). CLI ↔ MCP parity therefore holds by construction: a capability
-// cannot exist on one surface only, and flag names always match tool
-// parameter names (kebab-case ↔ snake_case).
+// Each Op declares its parameters, help text, safety class and handler once;
+// internal/cli turns every Op into a Cobra command (params → flags).
 package ops
 
 import (
@@ -67,9 +63,8 @@ type Column struct {
 	Fmt    func(any) string
 }
 
-// Op is one capability, exposed as a CLI command and an MCP tool.
+// Op is one capability, exposed as a CLI command.
 type Op struct {
-	Tool    string   // MCP tool name, e.g. op_list_work_packages
 	Cmd     []string // CLI path, e.g. {"wp", "list"}
 	Aliases []string
 	Short   string
@@ -77,9 +72,9 @@ type Op struct {
 	Example string
 	Params  []Param
 	Safety  Safety
-	// ReadOnlySafe keeps a non-Read Op available in read-only mode because
-	// it enforces Env.ReadOnly itself (op_api_request).
-	ReadOnlySafe bool
+	// ConfirmIf narrows confirmation of a Destructive Op to some arguments
+	// (api request: only DELETE). Nil means always confirm.
+	ConfirmIf func(a Args) bool
 	// Columns drive the text table for List results.
 	Columns []Column
 	Run     func(ctx context.Context, e *Env, a Args) (any, error)
@@ -145,8 +140,6 @@ type Env struct {
 	DefaultType string
 	// Language of text opcli writes to the server (audit comments): en, es.
 	Language string
-	// ReadOnly makes op_api_request refuse anything but GET (MCP --read-only).
-	ReadOnly bool
 	cache    resolverCache
 }
 
@@ -265,14 +258,22 @@ func (o *Op) Execute(ctx context.Context, e *Env, a Args) (any, error) {
 	return o.Run(ctx, e, a)
 }
 
-// ByTool returns the Op with the given MCP tool name, or nil.
-func ByTool(name string) *Op {
+// ByCmd returns the Op with the given CLI path ("wp update"), or nil.
+func ByCmd(path string) *Op {
 	for _, o := range registry {
-		if o.Tool == name {
+		if strings.Join(o.Cmd, " ") == path {
 			return o
 		}
 	}
 	return nil
+}
+
+// NeedsConfirm reports whether running o with a cannot be undone.
+func (o *Op) NeedsConfirm(a Args) bool {
+	if o.Safety != Destructive {
+		return false
+	}
+	return o.ConfirmIf == nil || o.ConfirmIf(a)
 }
 
 // Positionals returns the positional params in declaration order.

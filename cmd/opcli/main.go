@@ -1,4 +1,4 @@
-// Command opcli is a CLI and MCP server for OpenProject.
+// Command opcli is a CLI for OpenProject, for humans and AI agents.
 package main
 
 import (

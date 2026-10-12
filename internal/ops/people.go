@@ -18,7 +18,6 @@ func init() {
 var userColumns = []Column{{Header: "ID", Key: "id"}, {Header: "TYPE", Key: "_type"}, {Header: "NAME", Key: "name"}, {Header: "LOGIN", Key: "login"}, {Header: "EMAIL", Key: "email"}, {Header: "STATUS", Key: "status"}}
 
 var whoami = &Op{
-	Tool:    "op_whoami",
 	Cmd:     []string{"whoami"},
 	Aliases: []string{"me"},
 	Short:   "Show the authenticated user (checks URL and API key)",
@@ -36,7 +35,6 @@ var whoami = &Op{
 }
 
 var userList = &Op{
-	Tool:    "op_list_users",
 	Cmd:     []string{"user", "list"},
 	Aliases: []string{"ls", "search"},
 	Short:   "List or search users, groups and placeholder users",
@@ -76,7 +74,6 @@ var userList = &Op{
 }
 
 var userGet = &Op{
-	Tool:    "op_get_user",
 	Cmd:     []string{"user", "get"},
 	Aliases: []string{"view", "show"},
 	Short:   "Show a user",
@@ -98,7 +95,6 @@ var userGet = &Op{
 }
 
 var notifList = &Op{
-	Tool:    "op_list_notifications",
 	Cmd:     []string{"notification", "list"},
 	Aliases: []string{"ls"},
 	Short:   "List your notifications (unread by default)",
@@ -140,7 +136,6 @@ var notifList = &Op{
 }
 
 var notifRead = &Op{
-	Tool:  "op_mark_notifications_read",
 	Cmd:   []string{"notification", "read"},
 	Short: "Mark one notification (by id) or all unread notifications as read",
 	Example: `  opcli notification read 123

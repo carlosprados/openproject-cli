@@ -1,16 +1,20 @@
 package cli
 
 import (
+	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/carlosprados/openproject-cli/internal/ops"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 // Root-help sections for top-level groups.
@@ -48,7 +52,7 @@ func addOps(root *cobra.Command, st *state) {
 	for _, op := range ops.All() {
 		parent, ok := byPath[strings.Join(op.Cmd[:len(op.Cmd)-1], " ")]
 		if !ok {
-			panic(fmt.Sprintf("op %s: missing group %v", op.Tool, op.Cmd))
+			panic(fmt.Sprintf("op %v: missing group", op.Cmd))
 		}
 		c := opCommand(op, st)
 		if len(op.Cmd) == 1 {
@@ -121,10 +125,19 @@ func opCommand(op *ops.Op, st *state) *cobra.Command {
 		}
 	}
 
+	if op.Safety == ops.Destructive {
+		fs.Bool("yes", false, "Do not ask for confirmation (required without a terminal)")
+	}
+
 	c.RunE = func(cmd *cobra.Command, args []string) error {
 		a, err := collectArgs(cmd, op, args)
 		if err != nil {
 			return err
+		}
+		if op.NeedsConfirm(a) {
+			if err := confirm(cmd, args); err != nil {
+				return err
+			}
 		}
 		env, err := st.env()
 		if err != nil {
@@ -151,9 +164,8 @@ func longHelp(op *ops.Op) string {
 	case ops.Write:
 		b.WriteString("\n\nModifies data.")
 	case ops.Destructive:
-		b.WriteString("\n\nDestructive: cannot be undone.")
+		b.WriteString("\n\nDestructive: cannot be undone. Asks for confirmation on a terminal;\nwithout one it fails unless --yes is given.")
 	}
-	fmt.Fprintf(&b, "\nMCP tool: %s", op.Tool)
 	return b.String()
 }
 
@@ -183,6 +195,9 @@ func collectArgs(cmd *cobra.Command, op *ops.Op, args []string) (ops.Args, error
 				return nil, err
 			}
 			a[p.Name] = string(data)
+			if path != "-" {
+				a[ops.FileDirKey(p.Name)] = filepath.Dir(path)
+			}
 			continue
 		}
 		if !fs.Changed(name) {
@@ -202,8 +217,30 @@ func collectArgs(cmd *cobra.Command, op *ops.Op, args []string) (ops.Args, error
 	return a, nil
 }
 
-// stdin is overridable in tests.
-var stdin io.Reader = os.Stdin
+// stdin and isTerminal are overridable in tests.
+var (
+	stdin      io.Reader = os.Stdin
+	isTerminal           = func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
+)
+
+// confirm asks before an irreversible command. Without a terminal there is
+// nobody to ask: it fails unless --yes was given, so a script or an agent
+// never deletes by accident.
+func confirm(cmd *cobra.Command, args []string) error {
+	if yes, _ := cmd.Flags().GetBool("yes"); yes {
+		return nil
+	}
+	what := strings.TrimSpace(cmd.CommandPath() + " " + strings.Join(args, " "))
+	if !isTerminal() {
+		return fmt.Errorf("%s cannot be undone: pass --yes to confirm", what)
+	}
+	fmt.Fprintf(cmd.ErrOrStderr(), "%s cannot be undone. Continue? [y/N] ", what)
+	line, _ := bufio.NewReader(stdin).ReadString('\n')
+	if a := strings.ToLower(strings.TrimSpace(line)); a != "y" && a != "yes" {
+		return errors.New("cancelled")
+	}
+	return nil
+}
 
 func readPathOrStdin(path string) ([]byte, error) {
 	if path == "-" {

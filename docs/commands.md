@@ -1,62 +1,63 @@
 # opcli command reference
 
-Generated with `opcli docs`. Every command is also an MCP tool with the same parameters (flags in kebab-case ↔ tool parameters in snake_case). Global flags: `--config`, `--url`, `--api-key`, `-o text|json`.
+Generated with `opcli docs`. Global flags: `--config`, `--url`, `--api-key`, `-o text|json`. Destructive commands also take `--yes`.
 
-| Command | MCP tool | Effect | Summary |
-|---|---|---|---|
-| `opcli api describe` | `op_api_describe_endpoint` | read-only | Show parameters, body fields and examples of an endpoint |
-| `opcli api endpoints` | `op_api_list_endpoints` | read-only | Search the catalogue of API v3 endpoints |
-| `opcli api request` | `op_api_request` | **destructive** | Call any API v3 endpoint and print the JSON answer |
-| `opcli meeting get` | `op_get_meeting` | read-only | Show a meeting with its agenda items |
-| `opcli meeting list` | `op_list_meetings` | read-only | List meetings |
-| `opcli membership add` | `op_create_membership` | writes | Add a user or group to a project with one or more roles |
-| `opcli membership delete` | `op_delete_membership` | **destructive** | Remove a membership (the user loses access to the project) |
-| `opcli membership list` | `op_list_memberships` | read-only | List memberships, optionally by project and/or user |
-| `opcli membership update` | `op_update_membership` | writes | Replace the roles of a membership |
-| `opcli notification list` | `op_list_notifications` | read-only | List your notifications (unread by default) |
-| `opcli notification read` | `op_mark_notifications_read` | writes | Mark one notification (by id) or all unread notifications as read |
-| `opcli priority list` | `op_list_priorities` | read-only | List work package priorities |
-| `opcli project assignees` | `op_list_project_assignees` | read-only | List users that can be assigned work packages in a project |
-| `opcli project categories` | `op_list_project_categories` | read-only | List work package categories of a project |
-| `opcli project create` | `op_create_project` | writes | Create a project |
-| `opcli project delete` | `op_delete_project` | **destructive** | Delete a project and everything in it (irreversible) |
-| `opcli project get` | `op_get_project` | read-only | Show a project |
-| `opcli project list` | `op_list_projects` | read-only | List projects |
-| `opcli project update` | `op_update_project` | writes | Update a project (name, description, status, archive...) |
-| `opcli query list` | `op_list_queries` | read-only | List saved work package queries; run one with 'opcli wp list --query-id <id>' |
-| `opcli role list` | `op_list_roles` | read-only | List roles |
-| `opcli status list` | `op_list_statuses` | read-only | List all work package statuses |
-| `opcli time activities` | `op_list_time_activities` | read-only | List activities valid for time entries (optionally for a work package) |
-| `opcli time delete` | `op_delete_time_entry` | **destructive** | Delete a time entry |
-| `opcli time list` | `op_list_time_entries` | read-only | List time entries (yours by default) with an hour total |
-| `opcli time log` | `op_log_time` | writes | Log time on a work package |
-| `opcli time update` | `op_update_time_entry` | writes | Update a time entry |
-| `opcli type list` | `op_list_types` | read-only | List work package types, globally or enabled in a project |
-| `opcli user get` | `op_get_user` | read-only | Show a user |
-| `opcli user list` | `op_list_users` | read-only | List or search users, groups and placeholder users |
-| `opcli version create` | `op_create_version` | writes | Create a version in a project |
-| `opcli version list` | `op_list_versions` | read-only | List versions of a project (or all visible versions with --project all) |
-| `opcli version update` | `op_update_version` | writes | Update a version (dates, status, name...) |
-| `opcli whoami` | `op_whoami` | read-only | Show the authenticated user (checks URL and API key) |
-| `opcli wp activities` | `op_list_work_package_activities` | read-only | Show comments and change history of a work package |
-| `opcli wp allowed` | `op_list_work_package_allowed_values` | read-only | Show values a work package accepts: statuses, types, priorities, versions... |
-| `opcli wp attachment delete` | `op_delete_attachment` | **destructive** | Delete an attachment by its id |
-| `opcli wp attachment download` | `op_download_attachment` | read-only | Download an attachment by its id |
-| `opcli wp attachment list` | `op_list_attachments` | read-only | List attachments of a work package |
-| `opcli wp attachment upload` | `op_upload_attachment` | writes | Attach a local file to a work package |
-| `opcli wp backfill` | `op_backfill_work_package` | writes | Record work done after the fact: real dates, hours per day and an audit comment |
-| `opcli wp comment` | `op_comment_work_package` | writes | Add a comment to a work package |
-| `opcli wp create` | `op_create_work_package` | writes | Create a work package |
-| `opcli wp delete` | `op_delete_work_package` | **destructive** | Delete a work package (irreversible, children included) |
-| `opcli wp get` | `op_get_work_package` | read-only | Show a work package with description, relations, children and attachments |
-| `opcli wp list` | `op_list_work_packages` | read-only | List and search work packages with filters |
-| `opcli wp relation add` | `op_create_relation` | writes | Relate two work packages |
-| `opcli wp relation delete` | `op_delete_relation` | **destructive** | Delete a relation by its id (see 'wp relation list') |
-| `opcli wp relation list` | `op_list_relations` | read-only | List relations of a work package |
-| `opcli wp update` | `op_update_work_package` | writes | Update fields of a work package (status, assignee, dates, ...) |
-| `opcli wp watcher add` | `op_add_watcher` | writes | Add a watcher to a work package |
-| `opcli wp watcher list` | `op_list_watchers` | read-only | List watchers of a work package |
-| `opcli wp watcher remove` | `op_remove_watcher` | writes | Remove a watcher from a work package |
+| Command | Effect | Summary |
+|---|---|---|
+| `opcli api describe` | read-only | Show parameters, body fields and examples of an endpoint |
+| `opcli api endpoints` | read-only | Search the catalogue of API v3 endpoints |
+| `opcli api request` | **destructive** | Call any API v3 endpoint and print the JSON answer |
+| `opcli meeting get` | read-only | Show a meeting with its agenda items |
+| `opcli meeting list` | read-only | List meetings |
+| `opcli membership add` | writes | Add a user or group to a project with one or more roles |
+| `opcli membership delete` | **destructive** | Remove a membership (the user loses access to the project) |
+| `opcli membership list` | read-only | List memberships, optionally by project and/or user |
+| `opcli membership update` | writes | Replace the roles of a membership |
+| `opcli notification list` | read-only | List your notifications (unread by default) |
+| `opcli notification read` | writes | Mark one notification (by id) or all unread notifications as read |
+| `opcli priority list` | read-only | List work package priorities |
+| `opcli project assignees` | read-only | List users that can be assigned work packages in a project |
+| `opcli project categories` | read-only | List work package categories of a project |
+| `opcli project create` | writes | Create a project |
+| `opcli project delete` | **destructive** | Delete a project and everything in it (irreversible) |
+| `opcli project get` | read-only | Show a project |
+| `opcli project list` | read-only | List projects |
+| `opcli project update` | writes | Update a project (name, description, status, archive...) |
+| `opcli query list` | read-only | List saved work package queries; run one with 'opcli wp list --query-id <id>' |
+| `opcli role list` | read-only | List roles |
+| `opcli status list` | read-only | List all work package statuses |
+| `opcli time activities` | read-only | List activities valid for time entries (optionally for a work package) |
+| `opcli time delete` | **destructive** | Delete a time entry |
+| `opcli time list` | read-only | List time entries (yours by default) with an hour total |
+| `opcli time log` | writes | Log time on a work package |
+| `opcli time update` | writes | Update a time entry |
+| `opcli type list` | read-only | List work package types, globally or enabled in a project |
+| `opcli user get` | read-only | Show a user |
+| `opcli user list` | read-only | List or search users, groups and placeholder users |
+| `opcli version create` | writes | Create a version in a project |
+| `opcli version list` | read-only | List versions of a project (or all visible versions with --project all) |
+| `opcli version update` | writes | Update a version (dates, status, name...) |
+| `opcli whoami` | read-only | Show the authenticated user (checks URL and API key) |
+| `opcli wp activities` | read-only | Show comments and change history of a work package |
+| `opcli wp allowed` | read-only | Show values a work package accepts: statuses, types, priorities, versions... |
+| `opcli wp attachment delete` | **destructive** | Delete an attachment by its id |
+| `opcli wp attachment download` | read-only | Download an attachment by its id |
+| `opcli wp attachment list` | read-only | List attachments of a work package |
+| `opcli wp attachment upload` | writes | Attach a local file to a work package |
+| `opcli wp backfill` | writes | Record work done after the fact: real dates, hours per day and an audit comment |
+| `opcli wp comment` | writes | Add a comment to a work package |
+| `opcli wp comment-edit` | writes | Replace the text of a comment |
+| `opcli wp create` | writes | Create a work package |
+| `opcli wp delete` | **destructive** | Delete a work package (irreversible, children included) |
+| `opcli wp get` | read-only | Show a work package with description, relations, children and attachments |
+| `opcli wp list` | read-only | List and search work packages with filters |
+| `opcli wp relation add` | writes | Relate two work packages |
+| `opcli wp relation delete` | **destructive** | Delete a relation by its id (see 'wp relation list') |
+| `opcli wp relation list` | read-only | List relations of a work package |
+| `opcli wp update` | writes | Update fields of a work package (status, assignee, dates, ...) |
+| `opcli wp watcher add` | writes | Add a watcher to a work package |
+| `opcli wp watcher list` | read-only | List watchers of a work package |
+| `opcli wp watcher remove` | writes | Remove a watcher from a work package |
 
 ## opcli api describe
 
@@ -66,13 +67,13 @@ Describe an endpoint from the OpenAPI spec. The path can be the template
 (/api/v3/work_packages/{id}) or a concrete path (/api/v3/work_packages/42).
 Omit the method to describe every method of the path.
 
-MCP tool: `op_api_describe_endpoint` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<method-or-path>` (arg) | `method_or_path` | string |  | **required** HTTP method, or the path when describing all methods |
-| `<path>` (arg) | `path` | string |  | Endpoint path (when a method is given first) |
-| `--live` | `live` | bool |  | Use the spec served by the configured instance instead of the embedded one |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<method-or-path>` (arg) | string |  | **required** HTTP method, or the path when describing all methods |
+| `<path>` (arg) | string |  | Endpoint path (when a method is given first) |
+| `--live` | bool |  | Use the spec served by the configured instance instead of the embedded one |
 
 ```sh
   opcli api describe /api/v3/time_entries
@@ -86,12 +87,12 @@ Search the catalogue of API v3 endpoints
 
 List endpoints whose method, path, tag or summary contain every given word.
 
-MCP tool: `op_api_list_endpoints` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<search>` (arg) | `search` | string |  | Words to match (all must match) |
-| `--live` | `live` | bool |  | Use the spec served by the configured instance instead of the embedded one |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<search>` (arg) | string |  | Words to match (all must match) |
+| `--live` | bool |  | Use the spec served by the configured instance instead of the embedded one |
 
 ```sh
   opcli api endpoints                 # all ~300 operations
@@ -110,17 +111,18 @@ parameters go in --query key=value (repeatable); JSON values such as
 filters are passed verbatim. --flatten simplifies HAL answers (links become
 "name"/"nameId" pairs, collections become their elements).
 
-In read-only MCP mode only GET is allowed.
+DELETE asks for confirmation (--yes without a terminal). POST, PATCH and
+PUT write too: read the contract with 'opcli api describe' first.
 
-MCP tool: `op_api_request` · **destructive**
+Effect: **destructive**
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<method>` (arg) | `method` | string |  | **required** HTTP method |
-| `<path>` (arg) | `path` | string |  | **required** Endpoint path, e.g. /api/v3/projects or projects/3 |
-| `--query` | `query` | list |  | Query parameter key=value (repeatable) |
-| `--body` | `body` | string |  | JSON request body |
-| `--flatten` | `flatten` | bool |  | Simplify HAL output |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<method>` (arg) | string |  | **required** HTTP method |
+| `<path>` (arg) | string |  | **required** Endpoint path, e.g. /api/v3/projects or projects/3 |
+| `--query` | list |  | Query parameter key=value (repeatable) |
+| `--body` | string |  | JSON request body |
+| `--flatten` | bool |  | Simplify HAL output |
 
 ```sh
   opcli api request GET /api/v3/configuration
@@ -134,11 +136,11 @@ MCP tool: `op_api_request` · **destructive**
 
 Show a meeting with its agenda items
 
-MCP tool: `op_get_meeting` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<id>` (arg) | `id` | string |  | **required** Meeting id |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Meeting id |
 
 ```sh
   opcli meeting get 3
@@ -148,13 +150,13 @@ MCP tool: `op_get_meeting` · read-only
 
 List meetings
 
-MCP tool: `op_list_meetings` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `--project` | `project` | string |  | Only meetings of this project (default: all visible) |
-| `--max` | `max` | int | `50` | Maximum number of results (0 = all) |
-| `--page` | `page` | int |  | Fetch only this page (1-based) of size --max instead of paging automatically |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--project` | string |  | Only meetings of this project (default: all visible) |
+| `--max` | int | `50` | Maximum number of results (0 = all) |
+| `--page` | int |  | Fetch only this page (1-based) of size --max instead of paging automatically |
 
 ```sh
   opcli meeting list
@@ -165,14 +167,14 @@ MCP tool: `op_list_meetings` · read-only
 
 Add a user or group to a project with one or more roles
 
-MCP tool: `op_create_membership` · writes
+Effect: writes
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `--project` | `project` | string |  | Project id, identifier or name (default: configured project) |
-| `--user` | `user` | string |  | **required** User/group: login, email, name or id |
-| `--roles` | `roles` | list |  | **required** Role names or ids (see 'opcli role list') |
-| `--message` | `message` | string |  | Custom text for the notification email |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--project` | string |  | Project id, identifier or name (default: configured project) |
+| `--user` | string |  | **required** User/group: login, email, name or id |
+| `--roles` | list |  | **required** Role names or ids (see 'opcli role list') |
+| `--message` | string |  | Custom text for the notification email |
 
 ```sh
   opcli membership add -p demo-project --user jane.doe --roles Member
@@ -183,11 +185,11 @@ MCP tool: `op_create_membership` · writes
 
 Remove a membership (the user loses access to the project)
 
-MCP tool: `op_delete_membership` · **destructive**
+Effect: **destructive**
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<id>` (arg) | `id` | string |  | **required** Membership id |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Membership id |
 
 ```sh
   opcli membership delete 12
@@ -197,13 +199,13 @@ MCP tool: `op_delete_membership` · **destructive**
 
 List memberships, optionally by project and/or user
 
-MCP tool: `op_list_memberships` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `--project` | `project` | string |  | Project id, identifier or name (default: all projects) |
-| `--user` | `user` | string |  | me, or login/email/name/id |
-| `--max` | `max` | int | `200` | Maximum number of results (0 = all) |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--project` | string |  | Project id, identifier or name (default: all projects) |
+| `--user` | string |  | me, or login/email/name/id |
+| `--max` | int | `200` | Maximum number of results (0 = all) |
 
 ```sh
   opcli membership list -p demo-project
@@ -214,12 +216,12 @@ MCP tool: `op_list_memberships` · read-only
 
 Replace the roles of a membership
 
-MCP tool: `op_update_membership` · writes
+Effect: writes
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<id>` (arg) | `id` | string |  | **required** Membership id |
-| `--roles` | `roles` | list |  | **required** Role names or ids |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Membership id |
+| `--roles` | list |  | **required** Role names or ids |
 
 ```sh
   opcli membership update 12 --roles "Project admin"
@@ -229,15 +231,15 @@ MCP tool: `op_update_membership` · writes
 
 List your notifications (unread by default)
 
-MCP tool: `op_list_notifications` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `--all` | `all` | bool |  | Include already read notifications |
-| `--reason` | `reason` | string |  | Only this reason: mentioned, assigned, responsible, watched, commented, created, processed, prioritized, scheduled, dateAlert, shared |
-| `--project` | `project` | string |  | Only notifications of this project |
-| `--max` | `max` | int | `50` | Maximum number of results (0 = all) |
-| `--page` | `page` | int |  | Fetch only this page (1-based) of size --max instead of paging automatically |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--all` | bool |  | Include already read notifications |
+| `--reason` | string |  | Only this reason: mentioned, assigned, responsible, watched, commented, created, processed, prioritized, scheduled, dateAlert, shared |
+| `--project` | string |  | Only notifications of this project |
+| `--max` | int | `50` | Maximum number of results (0 = all) |
+| `--page` | int |  | Fetch only this page (1-based) of size --max instead of paging automatically |
 
 ```sh
   opcli notification list
@@ -249,12 +251,12 @@ MCP tool: `op_list_notifications` · read-only
 
 Mark one notification (by id) or all unread notifications as read
 
-MCP tool: `op_mark_notifications_read` · writes
+Effect: writes
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<id>` (arg) | `id` | string |  | Notification id (omit with --all) |
-| `--all` | `all` | bool |  | Mark every unread notification as read |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | Notification id (omit with --all) |
+| `--all` | bool |  | Mark every unread notification as read |
 
 ```sh
   opcli notification read 123
@@ -265,7 +267,7 @@ MCP tool: `op_mark_notifications_read` · writes
 
 List work package priorities
 
-MCP tool: `op_list_priorities` · read-only
+Effect: read-only
 
 ```sh
   opcli priority list
@@ -275,11 +277,11 @@ MCP tool: `op_list_priorities` · read-only
 
 List users that can be assigned work packages in a project
 
-MCP tool: `op_list_project_assignees` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<project>` (arg) | `project` | string |  | Project id, identifier or name (default: configured project) |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<project>` (arg) | string |  | Project id, identifier or name (default: configured project) |
 
 ```sh
   opcli project assignees demo-project
@@ -289,11 +291,11 @@ MCP tool: `op_list_project_assignees` · read-only
 
 List work package categories of a project
 
-MCP tool: `op_list_project_categories` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<project>` (arg) | `project` | string |  | Project id, identifier or name (default: configured project) |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<project>` (arg) | string |  | Project id, identifier or name (default: configured project) |
 
 ```sh
   opcli project categories demo-project
@@ -305,17 +307,17 @@ Create a project
 
 Create a project. The identifier is derived from the name when omitted.
 
-MCP tool: `op_create_project` · writes
+Effect: writes
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `--name` | `name` | string |  | **required** Project name |
-| `--identifier` | `identifier` | string |  | URL identifier (lowercase, digits, dashes) |
-| `--description` | `description` | string |  | Description (Markdown) |
-| `--parent` | `parent` | string |  | Parent project id/identifier/name ('none' for top level) |
-| `--public` | `public` | bool |  | Visible to everybody |
-| `--status` | `status` | string |  | Project status: not_started, on_track, at_risk, off_track, finished, discontinued |
-| `--status-explanation` | `status_explanation` | string |  | Status explanation (Markdown) |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--name` | string |  | **required** Project name |
+| `--identifier` | string |  | URL identifier (lowercase, digits, dashes) |
+| `--description` | string |  | Description (Markdown) |
+| `--parent` | string |  | Parent project id/identifier/name ('none' for top level) |
+| `--public` | bool |  | Visible to everybody |
+| `--status` | string |  | Project status: not_started, on_track, at_risk, off_track, finished, discontinued |
+| `--status-explanation` | string |  | Status explanation (Markdown) |
 
 ```sh
   opcli project create --name "Website relaunch"
@@ -326,11 +328,11 @@ MCP tool: `op_create_project` · writes
 
 Delete a project and everything in it (irreversible)
 
-MCP tool: `op_delete_project` · **destructive**
+Effect: **destructive**
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<project>` (arg) | `project` | string |  | **required** Project id, identifier or name |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<project>` (arg) | string |  | **required** Project id, identifier or name |
 
 ```sh
   opcli project delete old-stuff
@@ -340,11 +342,11 @@ MCP tool: `op_delete_project` · **destructive**
 
 Show a project
 
-MCP tool: `op_get_project` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<project>` (arg) | `project` | string |  | **required** Project id, identifier or name |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<project>` (arg) | string |  | **required** Project id, identifier or name |
 
 ```sh
   opcli project get demo-project
@@ -355,15 +357,15 @@ MCP tool: `op_get_project` · read-only
 
 List projects
 
-MCP tool: `op_list_projects` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `--search` | `search` | string |  | Filter by name or identifier (substring) |
-| `--archived` | `archived` | bool |  | List archived projects instead of active ones |
-| `--filter` | `filter` | string |  | Extra raw API filters as a JSON array |
-| `--max` | `max` | int | `100` | Maximum number of results (0 = all) |
-| `--page` | `page` | int |  | Fetch only this page (1-based) of size --max instead of paging automatically |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--search` | string |  | Filter by name or identifier (substring) |
+| `--archived` | bool |  | List archived projects instead of active ones |
+| `--filter` | string |  | Extra raw API filters as a JSON array |
+| `--max` | int | `100` | Maximum number of results (0 = all) |
+| `--page` | int |  | Fetch only this page (1-based) of size --max instead of paging automatically |
 
 ```sh
   opcli project list
@@ -375,19 +377,19 @@ MCP tool: `op_list_projects` · read-only
 
 Update a project (name, description, status, archive...)
 
-MCP tool: `op_update_project` · writes
+Effect: writes
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<project>` (arg) | `project` | string |  | **required** Project id, identifier or name |
-| `--name` | `name` | string |  | New name |
-| `--identifier` | `identifier` | string |  | New identifier |
-| `--archive` | `archive` | bool |  | Archive the project (true) or unarchive it (false) |
-| `--description` | `description` | string |  | Description (Markdown) |
-| `--parent` | `parent` | string |  | Parent project id/identifier/name ('none' for top level) |
-| `--public` | `public` | bool |  | Visible to everybody |
-| `--status` | `status` | string |  | Project status: not_started, on_track, at_risk, off_track, finished, discontinued |
-| `--status-explanation` | `status_explanation` | string |  | Status explanation (Markdown) |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<project>` (arg) | string |  | **required** Project id, identifier or name |
+| `--name` | string |  | New name |
+| `--identifier` | string |  | New identifier |
+| `--archive` | bool |  | Archive the project (true) or unarchive it (false) |
+| `--description` | string |  | Description (Markdown) |
+| `--parent` | string |  | Parent project id/identifier/name ('none' for top level) |
+| `--public` | bool |  | Visible to everybody |
+| `--status` | string |  | Project status: not_started, on_track, at_risk, off_track, finished, discontinued |
+| `--status-explanation` | string |  | Status explanation (Markdown) |
 
 ```sh
   opcli project update demo-project --status at_risk --status-explanation "Vendor late"
@@ -399,11 +401,11 @@ MCP tool: `op_update_project` · writes
 
 List saved work package queries; run one with 'opcli wp list --query-id <id>'
 
-MCP tool: `op_list_queries` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `--project` | `project` | string |  | Only queries of this project (default: all visible) |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--project` | string |  | Only queries of this project (default: all visible) |
 
 ```sh
   opcli query list
@@ -415,7 +417,7 @@ MCP tool: `op_list_queries` · read-only
 
 List roles
 
-MCP tool: `op_list_roles` · read-only
+Effect: read-only
 
 ```sh
   opcli role list
@@ -427,7 +429,7 @@ List all work package statuses
 
 List every status. Which ones a given work package may move to depends on the workflow: use 'opcli wp allowed <id> --field status'.
 
-MCP tool: `op_list_statuses` · read-only
+Effect: read-only
 
 ```sh
   opcli status list
@@ -437,11 +439,11 @@ MCP tool: `op_list_statuses` · read-only
 
 List activities valid for time entries (optionally for a work package)
 
-MCP tool: `op_list_time_activities` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `--wp` | `wp` | string |  | Work package id (activities can be restricted per project) |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--wp` | string |  | Work package id (activities can be restricted per project) |
 
 ```sh
   opcli time activities
@@ -452,11 +454,11 @@ MCP tool: `op_list_time_activities` · read-only
 
 Delete a time entry
 
-MCP tool: `op_delete_time_entry` · **destructive**
+Effect: **destructive**
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<id>` (arg) | `id` | string |  | **required** Time entry id |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Time entry id |
 
 ```sh
   opcli time delete 17
@@ -466,17 +468,17 @@ MCP tool: `op_delete_time_entry` · **destructive**
 
 List time entries (yours by default) with an hour total
 
-MCP tool: `op_list_time_entries` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `--user` | `user` | string | `me` | me (default), all, or login/email/name/id |
-| `--project` | `project` | string |  | Project id, identifier or name (default: all projects) |
-| `--wp` | `wp` | string |  | Only entries of this work package id |
-| `--from` | `from` | string | `week` | First day (inclusive): YYYY-MM-DD, today, yesterday, week, month, -Nd |
-| `--to` | `to` | string | `today` | Last day (inclusive) |
-| `--group-by` | `group_by` | string |  | Summarise hours by day, project, wp, activity or user instead of listing entries |
-| `--max` | `max` | int | `500` | Maximum number of results (0 = all) |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--user` | string | `me` | me (default), all, or login/email/name/id |
+| `--project` | string |  | Project id, identifier or name (default: all projects) |
+| `--wp` | string |  | Only entries of this work package id |
+| `--from` | string | `week` | First day (inclusive): YYYY-MM-DD, today, yesterday, week, month, -Nd |
+| `--to` | string | `today` | Last day (inclusive) |
+| `--group-by` | string |  | Summarise hours by day, project, wp, activity or user instead of listing entries |
+| `--max` | int | `500` | Maximum number of results (0 = all) |
 
 ```sh
   opcli time list                          # my entries, this week
@@ -494,16 +496,16 @@ Log hours on a work package. The project is taken from the work package.
 --activity is required by some instances; list valid ones with
 'opcli time activities --wp <id>'.
 
-MCP tool: `op_log_time` · writes
+Effect: writes
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `--wp` | `wp` | string |  | **required** Work package id |
-| `--hours` | `hours` | string |  | **required** Time spent: 1.5, 90m, 1h30m, PT1H30M |
-| `--date` | `date` | string | `today` | Day the work was done (YYYY-MM-DD, today, yesterday, -Nd) |
-| `--comment` | `comment` | string |  | What was done |
-| `--activity` | `activity` | string |  | Activity name or id (Development, Management, ...) |
-| `--user` | `user` | string |  | Log on behalf of this user (needs permission) |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--wp` | string |  | **required** Work package id |
+| `--hours` | string |  | **required** Time spent: 1.5, 90m, 1h30m, PT1H30M |
+| `--date` | string | `today` | Day the work was done (YYYY-MM-DD, today, yesterday, -Nd) |
+| `--comment` | string |  | What was done |
+| `--activity` | string |  | Activity name or id (Development, Management, ...) |
+| `--user` | string |  | Log on behalf of this user (needs permission) |
 
 ```sh
   opcli time log --wp 42 --hours 1.5 --comment "Code review"
@@ -515,16 +517,16 @@ MCP tool: `op_log_time` · writes
 
 Update a time entry
 
-MCP tool: `op_update_time_entry` · writes
+Effect: writes
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<id>` (arg) | `id` | string |  | **required** Time entry id |
-| `--wp` | `wp` | string |  | Move to this work package id |
-| `--hours` | `hours` | string |  | Time spent: 1.5, 90m, 1h30m, PT1H30M |
-| `--date` | `date` | string |  | Day the work was done |
-| `--comment` | `comment` | string |  | What was done |
-| `--activity` | `activity` | string |  | Activity name or id |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Time entry id |
+| `--wp` | string |  | Move to this work package id |
+| `--hours` | string |  | Time spent: 1.5, 90m, 1h30m, PT1H30M |
+| `--date` | string |  | Day the work was done |
+| `--comment` | string |  | What was done |
+| `--activity` | string |  | Activity name or id |
 
 ```sh
   opcli time update 17 --hours 3 --comment "Longer than expected"
@@ -535,11 +537,11 @@ MCP tool: `op_update_time_entry` · writes
 
 List work package types, globally or enabled in a project
 
-MCP tool: `op_list_types` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `--project` | `project` | string |  | Only types enabled in this project (default: all types) |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--project` | string |  | Only types enabled in this project (default: all types) |
 
 ```sh
   opcli type list
@@ -550,11 +552,11 @@ MCP tool: `op_list_types` · read-only
 
 Show a user
 
-MCP tool: `op_get_user` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<user>` (arg) | `user` | string |  | **required** me, or login/email/name/id |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<user>` (arg) | string |  | **required** me, or login/email/name/id |
 
 ```sh
   opcli user get me
@@ -566,15 +568,15 @@ MCP tool: `op_get_user` · read-only
 
 List or search users, groups and placeholder users
 
-MCP tool: `op_list_users` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `--search` | `search` | string |  | Match name, login or email (substring) |
-| `--kind` | `kind` | string | `user` | user (default), group, placeholder or all |
-| `--project` | `project` | string |  | Only members of this project |
-| `--max` | `max` | int | `100` | Maximum number of results (0 = all) |
-| `--page` | `page` | int |  | Fetch only this page (1-based) of size --max instead of paging automatically |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--search` | string |  | Match name, login or email (substring) |
+| `--kind` | string | `user` | user (default), group, placeholder or all |
+| `--project` | string |  | Only members of this project |
+| `--max` | int | `100` | Maximum number of results (0 = all) |
+| `--page` | int |  | Fetch only this page (1-based) of size --max instead of paging automatically |
 
 ```sh
   opcli user list
@@ -587,17 +589,17 @@ MCP tool: `op_list_users` · read-only
 
 Create a version in a project
 
-MCP tool: `op_create_version` · writes
+Effect: writes
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `--project` | `project` | string |  | Project id, identifier or name (default: configured project) |
-| `--name` | `name` | string |  | **required** Version name |
-| `--description` | `description` | string |  | Description |
-| `--start-date` | `start_date` | string |  | Start date (YYYY-MM-DD, today, +7d...) |
-| `--end-date` | `end_date` | string |  | Finish date (YYYY-MM-DD, +14d...) |
-| `--status` | `status` | string |  | open, locked or closed |
-| `--sharing` | `sharing` | string |  | Share with: none, descendants, hierarchy, tree, system |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--project` | string |  | Project id, identifier or name (default: configured project) |
+| `--name` | string |  | **required** Version name |
+| `--description` | string |  | Description |
+| `--start-date` | string |  | Start date (YYYY-MM-DD, today, +7d...) |
+| `--end-date` | string |  | Finish date (YYYY-MM-DD, +14d...) |
+| `--status` | string |  | open, locked or closed |
+| `--sharing` | string |  | Share with: none, descendants, hierarchy, tree, system |
 
 ```sh
   opcli version create -p demo-project --name "v1.2" --end-date 2026-11-30
@@ -607,11 +609,11 @@ MCP tool: `op_create_version` · writes
 
 List versions of a project (or all visible versions with --project all)
 
-MCP tool: `op_list_versions` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `--project` | `project` | string |  | Project id, identifier or name; 'all' for every project |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--project` | string |  | Project id, identifier or name; 'all' for every project |
 
 ```sh
   opcli version list -p demo-project
@@ -622,17 +624,17 @@ MCP tool: `op_list_versions` · read-only
 
 Update a version (dates, status, name...)
 
-MCP tool: `op_update_version` · writes
+Effect: writes
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<id>` (arg) | `id` | string |  | **required** Version id |
-| `--name` | `name` | string |  | New name |
-| `--description` | `description` | string |  | Description |
-| `--start-date` | `start_date` | string |  | Start date (YYYY-MM-DD, today, +7d...) |
-| `--end-date` | `end_date` | string |  | Finish date (YYYY-MM-DD, +14d...) |
-| `--status` | `status` | string |  | open, locked or closed |
-| `--sharing` | `sharing` | string |  | Share with: none, descendants, hierarchy, tree, system |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Version id |
+| `--name` | string |  | New name |
+| `--description` | string |  | Description |
+| `--start-date` | string |  | Start date (YYYY-MM-DD, today, +7d...) |
+| `--end-date` | string |  | Finish date (YYYY-MM-DD, +14d...) |
+| `--status` | string |  | open, locked or closed |
+| `--sharing` | string |  | Share with: none, descendants, hierarchy, tree, system |
 
 ```sh
   opcli version update 4 --status closed
@@ -642,7 +644,7 @@ MCP tool: `op_update_version` · writes
 
 Show the authenticated user (checks URL and API key)
 
-MCP tool: `op_whoami` · read-only
+Effect: read-only
 
 ```sh
   opcli whoami
@@ -653,12 +655,12 @@ MCP tool: `op_whoami` · read-only
 
 Show comments and change history of a work package
 
-MCP tool: `op_list_work_package_activities` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<id>` (arg) | `id` | string |  | **required** Work package id |
-| `--comments-only` | `comments_only` | bool |  | Only entries with a comment |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Work package id |
+| `--comments-only` | bool |  | Only entries with a comment |
 
 ```sh
   opcli wp activities 42
@@ -674,12 +676,12 @@ Statuses reflect the workflow (valid transitions for this type and your role).
 Without --field all fields with a finite list of values are shown. Pass
 --field assignee to list the users that can be assigned.
 
-MCP tool: `op_list_work_package_allowed_values` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<id>` (arg) | `id` | string |  | **required** Work package id |
-| `--field` | `field` | string |  | Only this field (status, type, priority, category, version, assignee, responsible, project, projectPhase) |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Work package id |
+| `--field` | string |  | Only this field (status, type, priority, category, version, assignee, responsible, project, projectPhase) |
 
 ```sh
   opcli wp allowed 42 --field status
@@ -691,11 +693,11 @@ MCP tool: `op_list_work_package_allowed_values` · read-only
 
 Delete an attachment by its id
 
-MCP tool: `op_delete_attachment` · **destructive**
+Effect: **destructive**
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<id>` (arg) | `id` | string |  | **required** Attachment id |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Attachment id |
 
 ```sh
   opcli wp attachment delete 15
@@ -710,13 +712,13 @@ The file is written to --dest (default: its original name in the current
 directory). With --stdout text content is returned instead of saved, which
 is how an AI agent can read a text attachment.
 
-MCP tool: `op_download_attachment` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<id>` (arg) | `id` | string |  | **required** Attachment id |
-| `--dest` | `dest` | string |  | Destination path (default: original file name) |
-| `--stdout` | `stdout` | bool |  | Return the content instead of writing a file (text files only) |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Attachment id |
+| `--dest` | string |  | Destination path (default: original file name) |
+| `--stdout` | bool |  | Return the content instead of writing a file (text files only) |
 
 ```sh
   opcli wp attachment download 15
@@ -728,11 +730,11 @@ MCP tool: `op_download_attachment` · read-only
 
 List attachments of a work package
 
-MCP tool: `op_list_attachments` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<id>` (arg) | `id` | string |  | **required** Work package id |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Work package id |
 
 ```sh
   opcli wp attachment list 42
@@ -742,16 +744,16 @@ MCP tool: `op_list_attachments` · read-only
 
 Attach a local file to a work package
 
-Upload a file. With MCP the path is read on the machine running the
-opcli MCP server, not on the client.
+Upload one file. To attach several at once, or while creating or
+updating a work package, use --attach on 'wp create' / 'wp update'.
 
-MCP tool: `op_upload_attachment` · writes
+Effect: writes
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<id>` (arg) | `id` | string |  | **required** Work package id |
-| `--file` | `file` | string |  | **required** Path of the file to upload |
-| `--description` | `description` | string |  | Optional description |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Work package id |
+| `--file` | string |  | **required** Path of the file to upload |
+| `--description` | string |  | Optional description |
 
 ```sh
   opcli wp attachment upload 42 --file ./screenshot.png
@@ -780,30 +782,30 @@ the assignee, else you. The audit comment follows the configured language
 (language: es in the config for Spanish). Notifications are off by default. Use --dry-run to
 see the plan without writing anything.
 
-MCP tool: `op_backfill_work_package` · writes
+Effect: writes
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `--wp` | `wp` | string |  | Existing work package id (omit and pass --subject to create one) |
-| `--subject` | `subject` | string |  | Title of the new work package (or new title for --wp) |
-| `--project` | `project` | string |  | Project of the new work package (default: configured project) |
-| `--type` | `type` | string |  | Type of the new work package (default: config default_type, else the project's default) |
-| `--description` | `description` | string |  | Description in Markdown |
-| `--assignee` | `assignee` | string |  | Who did the work: me, login, email, name or id |
-| `--parent` | `parent` | string |  | Parent work package id |
-| `--status` | `status` | string |  | Final status, e.g. Closed (applied after logging time) |
-| `--from` | `from` | string |  | **required** First real day of work: YYYY-MM-DD, yesterday, -Nd |
-| `--to` | `to` | string |  | Last real day of work (default: same as --from) |
-| `--hours` | `hours` | string |  | Total time to spread over the working days: 12, 7.5, 1h30m |
-| `--hours-per-day` | `hours_per_day` | string |  | Time to log on each working day instead of a total |
-| `--estimate` | `estimate` | string |  | Estimated work of a new work package (default: the logged total) |
-| `--activity` | `activity` | string |  | Time entry activity name or id (Development, Management, ...) |
-| `--user` | `user` | string |  | Log time on behalf of this user (default: the assignee; needs permission) |
-| `--comment` | `comment` | string |  | Comment on each time entry (default: the subject) |
-| `--reason` | `reason` | string |  | Why it is registered late; appended to the audit comment |
-| `--include-weekends` | `include_weekends` | bool |  | Log time on every day of the range, not only working days |
-| `--dry-run` | `dry_run` | bool |  | Show the plan without writing anything |
-| `--notify` | `notify` | bool | `false` | Send email notifications for these changes |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--wp` | string |  | Existing work package id (omit and pass --subject to create one) |
+| `--subject` | string |  | Title of the new work package (or new title for --wp) |
+| `--project` | string |  | Project of the new work package (default: configured project) |
+| `--type` | string |  | Type of the new work package (default: config default_type, else the project's default) |
+| `--description` | string |  | Description in Markdown |
+| `--assignee` | string |  | Who did the work: me, login, email, name or id |
+| `--parent` | string |  | Parent work package id |
+| `--status` | string |  | Final status, e.g. Closed (applied after logging time) |
+| `--from` | string |  | **required** First real day of work: YYYY-MM-DD, yesterday, -Nd |
+| `--to` | string |  | Last real day of work (default: same as --from) |
+| `--hours` | string |  | Total time to spread over the working days: 12, 7.5, 1h30m |
+| `--hours-per-day` | string |  | Time to log on each working day instead of a total |
+| `--estimate` | string |  | Estimated work of a new work package (default: the logged total) |
+| `--activity` | string |  | Time entry activity name or id (Development, Management, ...) |
+| `--user` | string |  | Log time on behalf of this user (default: the assignee; needs permission) |
+| `--comment` | string |  | Comment on each time entry (default: the subject) |
+| `--reason` | string |  | Why it is registered late; appended to the audit comment |
+| `--include-weekends` | bool |  | Log time on every day of the range, not only working days |
+| `--dry-run` | bool |  | Show the plan without writing anything |
+| `--notify` | bool | `false` | Send email notifications for these changes |
 
 ```sh
   opcli wp backfill -p demo-project --subject "Hotfix MQTT broker" --assignee jane.doe \
@@ -817,18 +819,43 @@ MCP tool: `op_backfill_work_package` · writes
 
 Add a comment to a work package
 
-Add a Markdown comment. Mention users with the OpenProject syntax if needed.
+Add a Markdown comment. Local images (![alt](shot.png)) are uploaded as
+attachments of the work package and rendered inline; relative paths resolve
+against --body-file (or the working directory). Fix a comment later with
+'wp comment-edit'.
 
-MCP tool: `op_comment_work_package` · writes
+Effect: writes
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<id>` (arg) | `id` | string |  | **required** Work package id |
-| `--body` | `body` | string |  | **required** Comment text (Markdown) |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Work package id |
+| `--body` | string |  | **required** Comment text (Markdown) |
 
 ```sh
   opcli wp comment 42 --body "Deployed to staging"
   git log -1 --format=%B | opcli wp comment 42 --body-file -
+  opcli wp comment 42 --body-file notes/review.md   # with ![](shot.png) inside
+```
+
+## opcli wp comment-edit
+
+Replace the text of a comment
+
+Replace the text of an existing comment. The id is the activity id shown
+by 'wp activities' (or 'wp get --activities'). Only your own comments can be
+edited unless your role allows editing others'. Comments cannot be deleted
+through the API. Local images are handled as in 'wp comment'.
+
+Effect: writes
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Activity (comment) id |
+| `--body` | string |  | **required** New comment text (Markdown) |
+
+```sh
+  opcli wp comment-edit 1234 --body "Deployed to production"
+  opcli wp comment-edit 1234 --body-file fixed.md
 ```
 
 ## opcli wp create
@@ -840,33 +867,41 @@ the configured default and the type to default_type from the config, else
 the project's default type. Long descriptions are easier
 to pass with --description-file (use - for stdin).
 
-MCP tool: `op_create_work_package` · writes
+Local images in the description (![alt](shot.png)) are uploaded as
+attachments and the link is rewritten so they render; relative paths resolve
+against the --description-file (or the working directory). Remote URLs are
+left alone. Every file is checked before anything is written, and the files
+are claimed by the new work package in the same request.
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `--project` | `project` | string |  | Project id, identifier or name (default: configured project) |
-| `--subject` | `subject` | string |  | **required** Title of the work package |
-| `--type` | `type` | string |  | Type name or id (Task, Bug, Feature, Epic, Milestone...); default: config default_type, else the project's default |
-| `--description` | `description` | string |  | Description in Markdown |
-| `--status` | `status` | string |  | Status name or id (see 'opcli wp allowed <id>') |
-| `--priority` | `priority` | string |  | Priority name or id |
-| `--assignee` | `assignee` | string |  | me, none, or login/email/name/id |
-| `--responsible` | `responsible` | string |  | Accountable user: me, none, or login/email/name/id |
-| `--parent` | `parent` | string |  | Parent work package id ('none' to detach) |
-| `--version` | `version` | string |  | Target version name or id ('none' to clear) |
-| `--category` | `category` | string |  | Category name or id ('none' to clear) |
-| `--start-date` | `start_date` | string |  | Start date: YYYY-MM-DD, today, tomorrow, +3d... ('none' to clear) |
-| `--due-date` | `due_date` | string |  | Finish date: YYYY-MM-DD, today, +7d... ('none' to clear) |
-| `--estimate` | `estimate` | string |  | Estimated work: 4, 1.5, 90m, 2h30m or PT2H ('none' to clear) |
-| `--remaining` | `remaining` | string |  | Remaining work, same formats as --estimate |
-| `--percent-done` | `percent_done` | int |  | % complete (0-100), when progress is work-based |
-| `--fields` | `fields` | string |  | Raw JSON object merged into the request, for custom fields or anything else, e.g. {"customField3":"x"} |
-| `--notify` | `notify` | bool | `true` | Send email notifications for this change |
+Effect: writes
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--project` | string |  | Project id, identifier or name (default: configured project) |
+| `--subject` | string |  | **required** Title of the work package |
+| `--attach` | list |  | Local file to attach (repeatable); a file already attached with the same name and size is not uploaded again |
+| `--type` | string |  | Type name or id (Task, Bug, Feature, Epic, Milestone...); default: config default_type, else the project's default |
+| `--description` | string |  | Description in Markdown |
+| `--status` | string |  | Status name or id (see 'opcli wp allowed <id>') |
+| `--priority` | string |  | Priority name or id |
+| `--assignee` | string |  | me, none, or login/email/name/id |
+| `--responsible` | string |  | Accountable user: me, none, or login/email/name/id |
+| `--parent` | string |  | Parent work package id ('none' to detach) |
+| `--version` | string |  | Target version name or id ('none' to clear) |
+| `--category` | string |  | Category name or id ('none' to clear) |
+| `--start-date` | string |  | Start date: YYYY-MM-DD, today, tomorrow, +3d... ('none' to clear) |
+| `--due-date` | string |  | Finish date: YYYY-MM-DD, today, +7d... ('none' to clear) |
+| `--estimate` | string |  | Estimated work: 4, 1.5, 90m, 2h30m or PT2H ('none' to clear) |
+| `--remaining` | string |  | Remaining work, same formats as --estimate |
+| `--percent-done` | int |  | % complete (0-100), when progress is work-based |
+| `--fields` | string |  | Raw JSON object merged into the request, for custom fields or anything else, e.g. {"customField3":"x"} |
+| `--notify` | bool | `true` | Send email notifications for this change |
 
 ```sh
   opcli wp create --subject "Fix login timeout" --type Bug --priority High
   opcli wp create -p demo-project --subject "Write docs" --assignee me --due-date +7d
   opcli wp create --subject "Sub-task" --parent 42 --estimate 3h
+  opcli wp create --subject "Crash on save" --type Bug --description-file bug.md --attach crash.log
   cat spec.md | opcli wp create --subject "Epic: SSO" --type Epic --description-file -
 ```
 
@@ -874,11 +909,11 @@ MCP tool: `op_create_work_package` · writes
 
 Delete a work package (irreversible, children included)
 
-MCP tool: `op_delete_work_package` · **destructive**
+Effect: **destructive**
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<id>` (arg) | `id` | string |  | **required** Work package id |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Work package id |
 
 ```sh
   opcli wp delete 42
@@ -891,12 +926,12 @@ Show a work package with description, relations, children and attachments
 Show one work package: all its fields, the Markdown description, relations,
 children, attachments and (with --activities) the comment/change history.
 
-MCP tool: `op_get_work_package` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<id>` (arg) | `id` | string |  | **required** Work package id |
-| `--activities` | `activities` | bool |  | Also include comments and change history |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Work package id |
+| `--activities` | bool |  | Also include comments and change history |
 
 ```sh
   opcli wp get 42
@@ -921,25 +956,25 @@ subject, description and comments.
   [{"dueDate":{"operator":"<t+","values":["7"]}}]
 See 'opcli help filters' for operators. --query-id runs a saved query instead.
 
-MCP tool: `op_list_work_packages` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `--project` | `project` | string |  | Project id, identifier or name; 'all' for every project (default: configured project) |
-| `--status` | `status` | string | `open` | open, closed, all, or comma-separated status names/ids |
-| `--type` | `type` | string |  | Comma-separated type names/ids (Task, Bug, Feature...) |
-| `--assignee` | `assignee` | string |  | me, none, or login/email/name/id |
-| `--author` | `author` | string |  | me, or login/email/name/id |
-| `--responsible` | `responsible` | string |  | Accountable user: me, none, or login/email/name/id |
-| `--priority` | `priority` | string |  | Comma-separated priority names/ids |
-| `--version` | `version` | string |  | Target version name or id (name needs a project) |
-| `--parent` | `parent` | string |  | Only direct children of this work package id |
-| `--search` | `search` | string |  | Full-text search in subject, description and comments |
-| `--filter` | `filter` | string |  | Extra raw API filters as a JSON array (see 'opcli help filters') |
-| `--sort` | `sort` | string | `updatedAt:desc` | Sort spec field:asc\|desc, comma-separated (id, subject, updatedAt, dueDate, priority, status...) |
-| `--query-id` | `query_id` | int |  | Run a saved query by id (other filters are ignored) |
-| `--max` | `max` | int | `50` | Maximum number of results (0 = all) |
-| `--page` | `page` | int |  | Fetch only this page (1-based) of size --max instead of paging automatically |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--project` | string |  | Project id, identifier or name; 'all' for every project (default: configured project) |
+| `--status` | string | `open` | open, closed, all, or comma-separated status names/ids |
+| `--type` | string |  | Comma-separated type names/ids (Task, Bug, Feature...) |
+| `--assignee` | string |  | me, none, or login/email/name/id |
+| `--author` | string |  | me, or login/email/name/id |
+| `--responsible` | string |  | Accountable user: me, none, or login/email/name/id |
+| `--priority` | string |  | Comma-separated priority names/ids |
+| `--version` | string |  | Target version name or id (name needs a project) |
+| `--parent` | string |  | Only direct children of this work package id |
+| `--search` | string |  | Full-text search in subject, description and comments |
+| `--filter` | string |  | Extra raw API filters as a JSON array (see 'opcli help filters') |
+| `--sort` | string | `updatedAt:desc` | Sort spec field:asc\|desc, comma-separated (id, subject, updatedAt, dueDate, priority, status...) |
+| `--query-id` | int |  | Run a saved query by id (other filters are ignored) |
+| `--max` | int | `50` | Maximum number of results (0 = all) |
+| `--page` | int |  | Fetch only this page (1-based) of size --max instead of paging automatically |
 
 ```sh
   opcli wp list                                  # open WPs, default project
@@ -960,15 +995,15 @@ Create a relation "<id> <type> <to>". For example "12 follows 10" means #12
 starts after #10 finishes; "12 blocks 10" means #10 cannot be closed before
 #12. For parent/child use 'opcli wp update <child> --parent <id>'.
 
-MCP tool: `op_create_relation` · writes
+Effect: writes
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<id>` (arg) | `id` | string |  | **required** Work package (from) id |
-| `--to` | `to` | string |  | **required** Related work package id |
-| `--type` | `type` | string | `relates` | Relation type: relates, duplicates, duplicated, blocks, blocked, precedes, follows, includes, partof, requires, required |
-| `--lag` | `lag` | int |  | Working days between the two (follows/precedes only) |
-| `--description` | `description` | string |  | Optional description |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Work package (from) id |
+| `--to` | string |  | **required** Related work package id |
+| `--type` | string | `relates` | Relation type: relates, duplicates, duplicated, blocks, blocked, precedes, follows, includes, partof, requires, required |
+| `--lag` | int |  | Working days between the two (follows/precedes only) |
+| `--description` | string |  | Optional description |
 
 ```sh
   opcli wp relation add 12 --type follows --to 10
@@ -980,11 +1015,11 @@ MCP tool: `op_create_relation` · writes
 
 Delete a relation by its id (see 'wp relation list')
 
-MCP tool: `op_delete_relation` · **destructive**
+Effect: **destructive**
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<id>` (arg) | `id` | string |  | **required** Relation id |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Relation id |
 
 ```sh
   opcli wp relation delete 7
@@ -994,11 +1029,11 @@ MCP tool: `op_delete_relation` · **destructive**
 
 List relations of a work package
 
-MCP tool: `op_list_relations` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<id>` (arg) | `id` | string |  | **required** Work package id |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Work package id |
 
 ```sh
   opcli wp relation list 42
@@ -1013,34 +1048,40 @@ concurrent edit triggers one automatic retry). Pass 'none' to clear user,
 parent, version, category, dates or estimates. --comment adds a comment in
 the same call. --project moves the work package to another project.
 
-MCP tool: `op_update_work_package` · writes
+Local images in --description or --comment, and --attach files, are
+uploaded first (see 'wp create'); a file already attached with the same name
+and size is reused, so re-running the same update attaches nothing new.
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<id>` (arg) | `id` | string |  | **required** Work package id |
-| `--subject` | `subject` | string |  | New title |
-| `--project` | `project` | string |  | Move to this project (id, identifier or name) |
-| `--comment` | `comment` | string |  | Also add this comment (Markdown) |
-| `--type` | `type` | string |  | Type name or id (Task, Bug, Feature, Epic, Milestone...); default: config default_type, else the project's default |
-| `--description` | `description` | string |  | Description in Markdown |
-| `--status` | `status` | string |  | Status name or id (see 'opcli wp allowed <id>') |
-| `--priority` | `priority` | string |  | Priority name or id |
-| `--assignee` | `assignee` | string |  | me, none, or login/email/name/id |
-| `--responsible` | `responsible` | string |  | Accountable user: me, none, or login/email/name/id |
-| `--parent` | `parent` | string |  | Parent work package id ('none' to detach) |
-| `--version` | `version` | string |  | Target version name or id ('none' to clear) |
-| `--category` | `category` | string |  | Category name or id ('none' to clear) |
-| `--start-date` | `start_date` | string |  | Start date: YYYY-MM-DD, today, tomorrow, +3d... ('none' to clear) |
-| `--due-date` | `due_date` | string |  | Finish date: YYYY-MM-DD, today, +7d... ('none' to clear) |
-| `--estimate` | `estimate` | string |  | Estimated work: 4, 1.5, 90m, 2h30m or PT2H ('none' to clear) |
-| `--remaining` | `remaining` | string |  | Remaining work, same formats as --estimate |
-| `--percent-done` | `percent_done` | int |  | % complete (0-100), when progress is work-based |
-| `--fields` | `fields` | string |  | Raw JSON object merged into the request, for custom fields or anything else, e.g. {"customField3":"x"} |
-| `--notify` | `notify` | bool | `true` | Send email notifications for this change |
+Effect: writes
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Work package id |
+| `--subject` | string |  | New title |
+| `--project` | string |  | Move to this project (id, identifier or name) |
+| `--comment` | string |  | Also add this comment (Markdown) |
+| `--attach` | list |  | Local file to attach (repeatable); a file already attached with the same name and size is not uploaded again |
+| `--type` | string |  | Type name or id (Task, Bug, Feature, Epic, Milestone...); default: config default_type, else the project's default |
+| `--description` | string |  | Description in Markdown |
+| `--status` | string |  | Status name or id (see 'opcli wp allowed <id>') |
+| `--priority` | string |  | Priority name or id |
+| `--assignee` | string |  | me, none, or login/email/name/id |
+| `--responsible` | string |  | Accountable user: me, none, or login/email/name/id |
+| `--parent` | string |  | Parent work package id ('none' to detach) |
+| `--version` | string |  | Target version name or id ('none' to clear) |
+| `--category` | string |  | Category name or id ('none' to clear) |
+| `--start-date` | string |  | Start date: YYYY-MM-DD, today, tomorrow, +3d... ('none' to clear) |
+| `--due-date` | string |  | Finish date: YYYY-MM-DD, today, +7d... ('none' to clear) |
+| `--estimate` | string |  | Estimated work: 4, 1.5, 90m, 2h30m or PT2H ('none' to clear) |
+| `--remaining` | string |  | Remaining work, same formats as --estimate |
+| `--percent-done` | int |  | % complete (0-100), when progress is work-based |
+| `--fields` | string |  | Raw JSON object merged into the request, for custom fields or anything else, e.g. {"customField3":"x"} |
+| `--notify` | bool | `true` | Send email notifications for this change |
 
 ```sh
   opcli wp update 42 --status "In progress" --assignee me
   opcli wp update 42 --status Closed --comment "Fixed in v1.2"
+  opcli wp update 42 --comment-file review.md --attach report.pdf
   opcli wp update 42 --due-date 2026-10-15 --estimate 6h
   opcli wp update 42 --assignee none --version none
   opcli wp update 42 --fields '{"customField3":"ACME"}'
@@ -1050,12 +1091,12 @@ MCP tool: `op_update_work_package` · writes
 
 Add a watcher to a work package
 
-MCP tool: `op_add_watcher` · writes
+Effect: writes
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<id>` (arg) | `id` | string |  | **required** Work package id |
-| `--user` | `user` | string |  | **required** me, or login/email/name/id |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Work package id |
+| `--user` | string |  | **required** me, or login/email/name/id |
 
 ```sh
   opcli wp watcher add 42 --user me
@@ -1066,11 +1107,11 @@ MCP tool: `op_add_watcher` · writes
 
 List watchers of a work package
 
-MCP tool: `op_list_watchers` · read-only
+Effect: read-only
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<id>` (arg) | `id` | string |  | **required** Work package id |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Work package id |
 
 ```sh
   opcli wp watcher list 42
@@ -1080,12 +1121,12 @@ MCP tool: `op_list_watchers` · read-only
 
 Remove a watcher from a work package
 
-MCP tool: `op_remove_watcher` · writes
+Effect: writes
 
-| Flag | MCP param | Type | Default | Description |
-|---|---|---|---|---|
-| `<id>` (arg) | `id` | string |  | **required** Work package id |
-| `--user` | `user` | string |  | **required** me, or login/email/name/id |
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Work package id |
+| `--user` | string |  | **required** me, or login/email/name/id |
 
 ```sh
   opcli wp watcher remove 42 --user me
