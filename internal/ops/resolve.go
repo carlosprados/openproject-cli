@@ -22,6 +22,7 @@ type resolverCache struct {
 	catalogs map[string][]named
 	projects map[string]int
 	me       int
+	schemas  map[string]map[string]string // "project-type" → customFieldN → name
 }
 
 type named struct {

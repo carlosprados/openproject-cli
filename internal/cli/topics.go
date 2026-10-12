@@ -88,9 +88,13 @@ JSON shapes:
              "description": "<markdown>"
              "estimatedTime": "PT2H"   (ISO 8601 durations)
              "url": "<browser link>"   (work packages)
+             "customFields": {"Customer": "ACME"}   (work packages, by name)
   actions  {"ok": true, "message": "..."}
   writes   the created/updated record; "uploaded": [{id, fileName, reused}]
-           lists the files sent with it (--attach, local Markdown images)
+           lists the files sent with it (--attach, local Markdown images);
+           "mentioned" / "unresolvedMentions" what @login became
+  dry run  {"dryRun": true, "requests": [{method, path, query, body, file}]}
+           (--dry-run on any write: nothing is sent)
 
 Pipe JSON to jq:
   opcli wp list --assignee me -o json | jq -r '.items[] | "\(.id) \(.subject)"'

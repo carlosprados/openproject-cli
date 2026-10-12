@@ -17,7 +17,7 @@ import (
 
 func init() { register(wpBackfill) }
 
-// Backfill is the result (or, with dry_run, the plan) of wp backfill.
+// Backfill is the result (or, with --dry-run, the plan) of wp backfill.
 type Backfill struct {
 	DryRun      bool           `json:"dryRun,omitempty"`
 	WorkPackage map[string]any `json:"workPackage,omitempty"`
@@ -85,7 +85,6 @@ see the plan without writing anything.`,
 		{Name: "comment", Kind: String, Short: "m", Desc: "Comment on each time entry (default: the subject)"},
 		{Name: "reason", Kind: String, File: true, Desc: "Why it is registered late; appended to the audit comment"},
 		{Name: "include_weekends", Kind: Bool, Desc: "Log time on every day of the range, not only working days"},
-		{Name: "dry_run", Kind: Bool, Desc: "Show the plan without writing anything"},
 		{Name: "notify", Kind: Bool, Default: false, Desc: "Send email notifications for these changes"},
 	},
 	Safety: Write,
@@ -144,7 +143,7 @@ func runBackfill(ctx context.Context, e *Env, a Args) (any, error) {
 	}
 
 	b := &Backfill{
-		DryRun:               a.Bool("dry_run"),
+		DryRun:               e.DryRun,
 		Subject:              a.String("subject"),
 		Start:                from,
 		Finish:               to,

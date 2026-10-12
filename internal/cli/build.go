@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/carlosprados/openproject-cli/internal/client"
 	"github.com/carlosprados/openproject-cli/internal/ops"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -128,13 +130,17 @@ func opCommand(op *ops.Op, st *state) *cobra.Command {
 	if op.Safety == ops.Destructive {
 		fs.Bool("yes", false, "Do not ask for confirmation (required without a terminal)")
 	}
+	if op.Safety != ops.Read {
+		fs.Bool("dry-run", false, "Print the requests that would be sent instead of writing (reads and server-side validation still run)")
+	}
 
 	c.RunE = func(cmd *cobra.Command, args []string) error {
 		a, err := collectArgs(cmd, op, args)
 		if err != nil {
 			return err
 		}
-		if op.NeedsConfirm(a) {
+		dry, _ := fs.GetBool("dry-run")
+		if op.NeedsConfirm(a) && !dry {
 			if err := confirm(cmd, args); err != nil {
 				return err
 			}
@@ -143,15 +149,66 @@ func opCommand(op *ops.Op, st *state) *cobra.Command {
 		if err != nil {
 			return err
 		}
+		if dry {
+			env.DryRun = true
+			env.C.DryRun = &client.Recorder{}
+		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer stop()
 		res, err := op.Execute(ctx, env, a)
 		if err != nil {
 			return err
 		}
+		if dry && len(env.C.DryRun.Requests) > 0 {
+			return renderPlan(cmd.OutOrStdout(), st.output(), env.C.DryRun.Requests, res)
+		}
 		return render(cmd.OutOrStdout(), st.output(), op, res)
 	}
 	return c
+}
+
+// planNotes are result keys worth showing in a dry run: what the op found
+// out while preparing the requests.
+var planNotes = []string{"mentioned", "unresolvedMentions"}
+
+// renderPlan prints what a dry run would have sent.
+func renderPlan(w io.Writer, format string, reqs []client.Recorded, res any) error {
+	plan := map[string]any{"dryRun": true, "requests": reqs}
+	if m, ok := res.(map[string]any); ok {
+		for _, k := range planNotes {
+			if v, ok := m[k]; ok {
+				plan[k] = v
+			}
+		}
+	}
+	if format == "json" {
+		return ops.RenderJSON(w, plan)
+	}
+	fmt.Fprintln(w, "Dry run: nothing was written. Would send:")
+	for _, r := range reqs {
+		line := r.Method + " " + r.Path
+		if r.Query != "" {
+			line += "?" + r.Query
+		}
+		if r.File != "" {
+			line += "  (upload " + r.File + ")"
+		}
+		fmt.Fprintln(w, "\n"+line)
+		if r.Body != nil {
+			var b strings.Builder
+			enc := json.NewEncoder(&b)
+			enc.SetIndent("  ", "  ")
+			enc.SetEscapeHTML(false)
+			_ = enc.Encode(r.Body)
+			fmt.Fprint(w, "  "+b.String())
+		}
+	}
+	for _, k := range planNotes {
+		if v, ok := plan[k]; ok {
+			fmt.Fprintf(w, "\n%s: %v\n", k, v)
+		}
+	}
+	return nil
 }
 
 func longHelp(op *ops.Op) string {

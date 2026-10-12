@@ -140,7 +140,10 @@ type Env struct {
 	DefaultType string
 	// Language of text opcli writes to the server (audit comments): en, es.
 	Language string
-	cache    resolverCache
+	// DryRun: the client records writes instead of sending them (see
+	// client.Recorder); ops that plan their own work (backfill) check it.
+	DryRun bool
+	cache  resolverCache
 }
 
 // NewEnv builds an Env.

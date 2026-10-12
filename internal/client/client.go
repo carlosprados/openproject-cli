@@ -32,6 +32,50 @@ type Client struct {
 	HTTP    *http.Client
 	// UserAgent is sent on every request.
 	UserAgent string
+	// DryRun, when set, records writes instead of sending them; reads and
+	// validation requests (forms, render) still reach the server.
+	DryRun *Recorder
+}
+
+// Recorder collects the writes of a dry run.
+type Recorder struct {
+	Requests []Recorded
+}
+
+// Recorded is one write a dry run did not send.
+type Recorded struct {
+	Method string `json:"method"`
+	Path   string `json:"path"`
+	Query  string `json:"query,omitempty"`
+	Body   any    `json:"body,omitempty"`
+	File   string `json:"file,omitempty"`
+}
+
+// sendsInDryRun reports whether a request has no side effects: reads and
+// the POSTs that only validate or render.
+func sendsInDryRun(method, path string) bool {
+	if method == http.MethodGet || method == http.MethodHead {
+		return true
+	}
+	p := strings.SplitN(path, "?", 2)[0]
+	return method == http.MethodPost && (strings.HasSuffix(p, "/form") || strings.Contains(p, "/render/"))
+}
+
+func (r *Recorder) record(c *Client, method, path string, query url.Values, body []byte, contentType, file string) []byte {
+	rec := Recorded{Method: method, Path: strings.TrimPrefix(c.URL(path, nil), c.BaseURL), File: file}
+	if len(query) > 0 {
+		rec.Query = query.Encode()
+	}
+	if file == "" && len(body) > 0 {
+		var v any
+		if strings.Contains(contentType, "json") && json.Unmarshal(body, &v) == nil {
+			rec.Body = v
+		} else {
+			rec.Body = string(body)
+		}
+	}
+	r.Requests = append(r.Requests, rec)
+	return []byte(`{"id":0}`)
 }
 
 // New builds a client for baseURL (e.g. https://op.example.com) using apiKey.
@@ -149,6 +193,9 @@ func (c *Client) JSON(ctx context.Context, method, path string, query url.Values
 // Raw performs a request and returns the raw body and content type. It is
 // the single point where auth, retries and error decoding happen.
 func (c *Client) Raw(ctx context.Context, method, path string, query url.Values, body []byte, contentType string) ([]byte, string, error) {
+	if c.DryRun != nil && !sendsInDryRun(method, path) {
+		return c.DryRun.record(c, method, path, query, body, contentType, ""), "application/json", nil
+	}
 	target := c.URL(path, query)
 	const attempts = 3
 	for attempt := 1; ; attempt++ {
@@ -280,6 +327,10 @@ func Elements(res map[string]any) []map[string]any {
 // Upload posts a file as multipart (metadata + file) to an attachments
 // collection path such as /api/v3/work_packages/42/attachments.
 func (c *Client) Upload(ctx context.Context, path, file, description string) (map[string]any, error) {
+	if c.DryRun != nil {
+		c.DryRun.record(c, http.MethodPost, path, nil, nil, "", file)
+		return map[string]any{"id": 0}, nil
+	}
 	content, err := os.ReadFile(file)
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", file, err)

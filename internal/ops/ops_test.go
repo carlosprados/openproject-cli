@@ -24,7 +24,7 @@ func TestRegistryConventions(t *testing.T) {
 		groups[g.Name] = true
 	}
 	// yes is added by the CLI to destructive ops.
-	reserved := map[string]bool{"help": true, "output": true, "config": true, "url": true, "api-key": true, "yes": true}
+	reserved := map[string]bool{"help": true, "output": true, "config": true, "url": true, "api-key": true, "yes": true, "dry-run": true}
 	reservedShort := map[string]bool{"h": true, "o": true, "v": true}
 
 	for _, op := range All() {
@@ -156,6 +156,21 @@ func TestPick(t *testing.T) {
 	}
 }
 
+// testSchema is a work package form schema: a workflow that only allows
+// "In progress", and custom fields of several types.
+const testSchema = `{
+  "subject": {"type": "String", "name": "Subject", "required": true, "writable": true},
+  "lockVersion": {"type": "Integer", "name": "Lock version", "writable": false},
+  "status": {"type": "Status", "name": "Status", "required": true, "writable": true, "location": "_links",
+    "_embedded": {"allowedValues": [{"id": 7, "name": "In progress", "_links": {"self": {"href": "/api/v3/statuses/7"}}}]}},
+  "customField1": {"type": "String", "name": "Customer", "writable": true},
+  "customField2": {"type": "Integer", "name": "Points", "writable": true},
+  "customField3": {"type": "CustomOption", "name": "Area", "writable": true, "location": "_links",
+    "_links": {"allowedValues": [{"href": "/api/v3/custom_options/1", "title": "Backend"}, {"href": "/api/v3/custom_options/3", "title": "Ops"}]}},
+  "customField4": {"type": "[]CustomOption", "name": "Tags", "writable": true, "location": "_links",
+    "_embedded": {"allowedValues": [{"id": 4, "value": "urgent", "_links": {"self": {"href": "/api/v3/custom_options/4"}}}, {"id": 5, "value": "customer", "_links": {"self": {"href": "/api/v3/custom_options/5"}}}]}}
+}`
+
 // fakeOP serves a minimal OpenProject for handler tests and records requests.
 type fakeOP struct {
 	t        *testing.T
@@ -175,7 +190,23 @@ func (f *fakeOP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/api/v3/statuses":
 		_, _ = w.Write([]byte(`{"_type":"Collection","total":2,"count":2,"_embedded":{"elements":[{"id":1,"name":"New"},{"id":7,"name":"In progress"}]}}`))
 	case r.URL.Path == "/api/v3/work_packages/42" && r.Method == "GET":
-		_, _ = w.Write([]byte(`{"_type":"WorkPackage","id":42,"lockVersion":5,"subject":"S","_links":{"project":{"href":"/api/v3/projects/4","title":"P"}}}`))
+		_, _ = w.Write([]byte(`{"_type":"WorkPackage","id":42,"lockVersion":5,"subject":"S","customField1":"ACME","_links":{"project":{"href":"/api/v3/projects/4","title":"P"},"type":{"href":"/api/v3/types/1","title":"Task"}}}`))
+	case strings.HasSuffix(r.URL.Path, "/form") && r.Method == "POST":
+		errs := `{}`
+		if links, _ := body["_links"].(map[string]any); links != nil {
+			if st, _ := links["status"].(map[string]any); st != nil && st["href"] == "/api/v3/statuses/1" {
+				errs = `{"status":{"message":"Status is invalid because no valid transition exists."}}`
+			}
+		}
+		_, _ = w.Write([]byte(`{"_type":"Form","_embedded":{"validationErrors":` + errs + `,"schema":` + testSchema + `}}`))
+	case r.URL.Path == "/api/v3/work_packages/schemas/4-1":
+		_, _ = w.Write([]byte(testSchema))
+	case r.URL.Path == "/api/v3/principals":
+		if strings.Contains(r.URL.Query().Get("filters"), "jane") {
+			_, _ = w.Write([]byte(`{"_type":"Collection","total":1,"count":1,"_embedded":{"elements":[{"_type":"User","id":9,"name":"Jane Doe","login":null}]}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"_type":"Collection","total":0,"count":0,"_embedded":{"elements":[]}}`))
 	case r.URL.Path == "/api/v3/work_packages/42" && r.Method == "PATCH":
 		if body["lockVersion"] != float64(5) {
 			w.WriteHeader(http.StatusConflict)

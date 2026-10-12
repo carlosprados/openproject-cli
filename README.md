@@ -98,7 +98,11 @@ opcli wp list -p website --type Bug --search "timeout"
 opcli wp list --status all --filter '[{"updatedAt":{"operator":">t-","values":["3"]}}]'
 opcli wp get 42 --activities
 opcli wp allowed 42 --field status                 # valid transitions right now
+opcli wp fields -p website --type Bug              # fields, custom ones included, and their values
 opcli wp create -p website --subject "Fix login" --type Bug --priority High --assignee me
+opcli wp update 42 --field "Customer=ACME" --field "Tags=urgent,customer"
+opcli wp list -p website --field "Customer=ACME"
+opcli wp update 42 --status Closed --comment "Done, @jane please verify" --dry-run
 cat spec.md | opcli wp create --subject "SSO epic" --type Epic --description-file -
 opcli wp relation add 43 --type follows --to 42
 opcli wp backfill -p website --subject "Hotfix" --assignee jane --from 2026-09-14 --to 2026-09-18 --hours 12h --dry-run  # unplanned work, real dates
@@ -119,8 +123,9 @@ opcli skill show             # print it, for any other agent
 
 The skill is embedded in the binary, so it always matches it: re-run
 `opcli skill install --force` after upgrading (`task install` does it). It
-covers every command, the JSON shapes, Markdown and images, the destructive
-`--yes` rule, what opcli cannot do, the errors and recipes for common requests
+covers every command, the JSON shapes, Markdown, images and mentions, custom
+fields by name, `--dry-run` and the server-side validation of every write,
+the destructive `--yes` rule, what opcli cannot do, the errors and recipes for common requests
 (my day, triage, status report, logging time from free text, timesheet review,
 turning notes into work packages).
 
