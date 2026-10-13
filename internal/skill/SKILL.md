@@ -31,7 +31,8 @@ opcli config show -o json     # effective configuration (key masked)
 ## Output
 
 Pass **`-o json`** whenever you will read the output. Text output is for humans
-and may change. Every command honours `-o json`, writes included.
+and may change. Every command honours `-o json`, writes included. Timestamps
+are UTC in JSON; meeting and reminder text output shows them in local time.
 
 | Command | JSON |
 |---|---|

@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/carlosprados/openproject-cli/internal/hal"
 )
@@ -215,6 +216,14 @@ var (
 			return ""
 		}
 		return hal.String(v) + "%"
+	}
+	// timeFmt shows an API timestamp in the local time zone, to the minute.
+	timeFmt = func(v any) string {
+		t, err := time.Parse(time.RFC3339, hal.String(v))
+		if err != nil {
+			return hal.String(v)
+		}
+		return t.Local().Format("2006-01-02 15:04")
 	}
 )
 
