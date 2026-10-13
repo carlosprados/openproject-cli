@@ -1,6 +1,6 @@
 ---
 name: opcli
-description: Read and change work in an OpenProject instance from the shell with the `opcli` CLI — list and search work packages, view them with comments and history, create, update (custom fields by name), change status along the workflow, comment (with images and @mentions that notify), dry-run any write with server-side validation, relate, watch, attach files, build parent/child hierarchies (epics), log and review time, record work done after the fact (backfill), and manage projects, versions, memberships and notifications; any other API v3 endpoint through `opcli api`. Load whenever the task mentions OpenProject, work packages (WP, #1234), tasks, bugs, epics, milestones, timesheets, time entries, "imputar horas", "apuntar horas", or turning notes into OpenProject work. Use INSTEAD of calling the OpenProject API by hand.
+description: Read and change work in an OpenProject instance from the shell with the `opcli` CLI — list and search work packages, view them with comments and history, create, update (custom fields by name), change status along the workflow, comment (with images and @mentions that notify), dry-run any write with server-side validation, relate, watch, attach files, build parent/child hierarchies (epics), bulk-update several work packages, set personal reminders, log and review time (or run a timer), record work done after the fact (backfill), schedule meetings with agenda, participants and outcomes (minutes), and manage projects, versions, memberships and notifications; any other API v3 endpoint through `opcli api`. Load whenever the task mentions OpenProject, work packages (WP, #1234), tasks, bugs, epics, milestones, timesheets, time entries, "imputar horas", "apuntar horas", reminders, OpenProject meetings, agendas or minutes ("acta", "orden del día"), or turning notes into OpenProject work. Use INSTEAD of calling the OpenProject API by hand.
 ---
 
 # opcli — OpenProject from the shell
@@ -36,12 +36,16 @@ and may change. Every command honours `-o json`, writes included.
 | Command | JSON |
 |---|---|
 | any `list` | `{total, count, items: [...]}` — `total > count` means more pages |
-| `wp get`, `project get`, `user get`, `meeting get` | one flat record |
+| `wp get`, `project get`, `user get` | one flat record |
+| `meeting get` | the meeting + `agendaItems[]`, each with its `outcomes[]` |
 | `wp allowed` | `{<field>: [{id, name}, …]}`, e.g. `jq -r '.status[].name'` |
 | `wp fields` | list of `{key, name, type, required, custom, values?, valuesFrom?, help?}` |
 | `wp create`, `wp update`, `wp comment`, `wp comment-edit` | the record written (+ `uploaded[]`, `mentioned[]`, `unresolvedMentions[]`) |
+| `wp update` with several ids | a list of the updated work packages |
 | any write with `--dry-run` | `{dryRun: true, requests: [{method, path, query?, body?, file?}], mentioned?, unresolvedMentions?}` |
-| `time log`, `time update`, `wp relation add`, `membership add` | the record created/updated, with its `id` |
+| `time log`, `time update`, `time start`, `time stop`, `wp relation add`, `membership add`, `meeting create`, `meeting agenda add`, `meeting outcome add` | the record created/updated, with its `id` |
+| `wp remind` | the reminder (`id`, `remindAt` in UTC, `note`, `remindable`), `replaced: true` if it moved an existing one |
+| `time status` | `{running: false}` or the running entry + `running: true`, `elapsed` |
 | `wp delete`, `time delete`, `notification read`, … | `{ok: true, message}` |
 | `wp backfill` | plan or result: `workPackage`, `startDate`, `dueDate`, `totalHours`, `days[]` (`date`, `hours`, `timeEntryId`), `comment` |
 
@@ -68,6 +72,7 @@ opcli wp list --assignee me --project all -o json | jq -r '.items[] | "\(.id) \(
 | version, category | name (needs the project) or id; `none` clears |
 | dates | `YYYY-MM-DD`, `today`, `yesterday`, `tomorrow`, `week`, `month`, `+7d`, `-3d`; `none` clears |
 | durations | `1.5`, `90m`, `1h30m`, `PT1H30M` |
+| date and time | `"YYYY-MM-DD HH:MM"`, `"tomorrow 9:30"`, `"+2d 16:00"`, `16:00` (today), `+2h`, a date alone (09:00); in the user's OpenProject time zone |
 
 Names are instance-specific and often localised (a Spanish instance may have
 no `Task` or `Closed`). Unknown or ambiguous names fail with the list of valid
@@ -122,8 +127,8 @@ opcli wp attachment download 15 --dest /tmp/report.pdf
 opcli query list --project demo-project -o json
 opcli notification list --reason mentioned -o json         # unread; --all includes read
 opcli notification list --project demo-project --all --max 100 -o json
-opcli meeting list --project demo-project -o json
-opcli meeting get 7 -o json
+opcli reminder list -o json                                # my active reminders
+opcli time status -o json                                  # is a timer running?
 ```
 
 - `wp list` defaults: open work packages, the configured project (else every
@@ -182,6 +187,8 @@ opcli wp update 42 --field "Tags=urgent,customer" --field "Points=8" --field "Du
 opcli wp update 42 --field "Customer="               # clear a custom field
 opcli wp update 42 --status Closed --dry-run         # validated by the server, nothing written
 opcli wp update 42 --description-file new.md --comment-file why.md
+opcli wp update 42 43 44 --version "Sprint 7" --notify=false --dry-run   # same change on several
+opcli wp remind 42 --at "tomorrow 9:00" --note "Call the customer"
 opcli wp comment 42 --body "Deployed to staging"
 opcli wp comment 42 --body "@jane can you review the migration?"
 opcli wp comment 42 --body "Customer budget is tight" --internal
@@ -198,6 +205,14 @@ opcli notification read --all
 - `wp update` only sends the flags you pass. Lock versions are handled (one
   automatic retry on a concurrent edit). The fields go in one request: if
   OpenProject rejects one, none changes; `--comment` is posted after it.
+- `wp update` with **several ids** (`42 43 44` or `42,43`) applies the same
+  change to each in turn, each validated on its own. If any fails, the error
+  names those that failed and why and those that were updated: nothing is
+  rolled back. Dry-run it first.
+- `wp remind` sets a **personal reminder**: OpenProject notifies only you at
+  that time. One active reminder per work package: setting another moves it
+  (`replaced: true`). The time must be in the future. `reminder delete <id>`
+  cancels it.
 - New work packages without `--type` get `default_type` from the config, else
   the project's default type. `--project` falls back to the configured one.
 - `--notify` is on by default for create/update: pass `--notify=false` for
@@ -261,10 +276,19 @@ opcli time list --from 2026-09-01 --to 2026-09-30 --user all --project demo-proj
 opcli time list --wp 42 --user all --from -365d -o json
 opcli time update 15 --hours 2h --comment "Review + fixes"
 opcli time update 15 --wp 43 --date 2026-10-09 --activity Testing
+opcli time start 42 --activity Development --comment "Code review"   # timer
+opcli time status -o json
+opcli time stop                                           # logs the elapsed time
+opcli time stop --hours 1h15m --comment "Review + fixes"  # or a different amount
 ```
 
 `--activity` is required by some instances; the valid ones depend on the
 project (`time activities --wp <id>`). `time list` returns the hour total.
+`time log` and `time update` are validated by the server before writing.
+
+The **timer** is the one the web UI shows: one per user at a time.
+`time start` refuses while another runs (it names it); `time stop` turns it
+into a time entry with the elapsed time rounded to the minute, or `--hours`.
 
 ### Work done but never planned or logged: backfill
 
@@ -284,6 +308,38 @@ opcli wp backfill --subject "Audit" --description-file audit.md --parent 40 --es
 Time goes to `--user`, else the assignee, else you. The creation date of a
 work package cannot be changed through the API: reports must filter on
 start/finish dates or the time entries' date.
+
+## Meetings
+
+A meeting has a start, a duration, a location, participants, a state and an
+agenda. OpenProject does not create the video call: create it in Google Meet
+or Teams and put the link in `--location`.
+
+```sh
+opcli meeting list --when upcoming --participant me -o json
+opcli meeting list --project demo-project --when past --max 10 -o json
+opcli meeting get 7 -o json                 # participants, agenda items, outcomes
+MID=$(opcli meeting create --project demo-project --title "Sprint review" --start "2026-10-20 10:00" --duration 45m --location https://meet.google.com/abc-defg-hij --participant jane,john -o json | jq -r .id)
+opcli meeting agenda add "$MID" --title "Release status" --duration 10m --presenter jane --notes-file status.md
+opcli meeting agenda add "$MID" --wp 42 --duration 5m      # discuss a work package
+opcli meeting agenda update 37 --title "Release status and risks" --duration 15m --presenter none --notes "Moved to Friday"
+opcli meeting agenda update 38 --wp 43
+opcli meeting update "$MID" --state open --notify          # publish it and email the participants
+opcli meeting update "$MID" --title "Sprint 7 review" --start "2026-10-21 10:00" --participant ana --remove-participant john
+opcli meeting update "$MID" --state in_progress            # needed before recording outcomes
+opcli meeting outcome add 37 --notes "Release moves to Friday"
+opcli meeting outcome add 37 --wp 51 --notes "Jane prepares the migration"   # follow-up WP
+opcli meeting update "$MID" --state closed
+```
+
+- You are added to the participants of a meeting you create; `meeting update
+  --participant` adds and `--remove-participant` removes.
+- States: `draft` (new meetings) → `open` → `in_progress` → `closed`, or
+  `cancelled`. Outcomes can only be recorded `in_progress`; a closed meeting's
+  agenda cannot change. `--notify` emails the participants about that change.
+- `meeting create` and `meeting update` are validated by the server first.
+- Agenda item and outcome ids come from `meeting get`. A follow-up work
+  package is created with `wp create` first, then linked with `outcome add --wp`.
 
 ## Projects, versions, members
 
@@ -342,6 +398,10 @@ confirmed.
 - **Timesheet review**: `time list --from week --max 0 -o json` (and
   `--group-by day`). Report totals per day and project, missing or short
   days, weekends, vague comments; fix with `time log` / `time update`.
+- **Meeting minutes**: `meeting get <id> -o json`; turn the notes the user
+  gives you into outcomes per agenda item (`outcome add --notes`), create a
+  work package for each action item and link it (`outcome add --wp`), then
+  propose closing the meeting. Show the list before writing.
 - **Notes or an email into work packages**: search duplicates with `wp list
   --search`, check `type list --project <p>` and `priority list`, draft
   subject (imperative, under 80 chars), type, priority and a Markdown
@@ -356,6 +416,10 @@ opcli time delete 15 --yes
 opcli wp relation delete 77 --yes           # ids from 'wp relation list'
 opcli wp attachment delete 15 --yes
 opcli membership delete 31 --yes
+opcli meeting delete 7 --yes                # with its agenda and outcomes
+opcli meeting agenda delete 37 --yes
+opcli meeting outcome delete 4 --yes
+opcli reminder delete 3 --yes
 opcli project delete old-stuff --yes        # everything in it
 opcli api request DELETE work_packages/42 --yes
 ```
@@ -372,9 +436,10 @@ Say so instead of improvising:
   or the author of anything;
 - ordering cards on a board or moving them between board columns other than
   by changing the field the column is based on (e.g. `--status`);
-- creating or editing meetings (the API allows it: `opcli api endpoints
-  meeting`), users, groups, roles, types, statuses, custom field definitions
-  or workflows (admin settings): read-only or web UI;
+- recurring meeting series and meeting sections (reachable with `opcli api
+  endpoints meeting`); creating the Google Meet / Teams call itself;
+- creating or editing users, groups, roles, types, statuses, custom field
+  definitions or workflows (admin settings): read-only or web UI;
 - filtering by user or version custom fields (OpenProject has no filter for
   them).
 
@@ -406,4 +471,11 @@ argument also prints the command usage.
   server is not reachable from this machine. Do not retry in a loop or touch
   the config; tell the user.
 - `no project given and no default project configured`: pass `--project`.
+- `outcomes can only change while the meeting is in progress: opcli meeting
+  update N --state in_progress`: run that (if the meeting is really being
+  held) and retry; adding and deleting outcomes both need it.
+- `a timer is already running on #N …`: `time stop` it first (ask the user if
+  it is not yours to stop); `no timer is running`: nothing to stop.
+- `Date must be in the future` on `wp remind`: the time is past (times are in
+  the user's OpenProject time zone).
 - `… cannot be undone: pass --yes to confirm`: see Destructive commands.

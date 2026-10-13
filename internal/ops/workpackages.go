@@ -250,11 +250,7 @@ var wpListNoise = map[string]bool{
 func (e *Env) decorateWPs(ctx context.Context, items []map[string]any) {
 	for _, it := range items {
 		e.decorateWP(ctx, it)
-		for k, v := range it {
-			if v == nil || v == "" || wpListNoise[k] {
-				delete(it, k)
-			}
-		}
+		compactWP(it)
 	}
 }
 
@@ -486,8 +482,13 @@ statuses that are, and so does any other value that is not allowed.
 Local images in --description or --comment, and --attach files, are
 uploaded after that check (see 'wp create'); a file already attached with
 the same name and size is reused, so re-running the same update attaches
-nothing new. @login in the text becomes a mention that notifies the user.`,
+nothing new. @login in the text becomes a mention that notifies the user.
+
+Several ids apply the same change to each, one after the other; each one
+is validated on its own, and the error names the ones that failed and the
+ones that were updated. Run it with --dry-run first.`,
 	Example: `  opcli wp update 42 --status "In progress" --assignee me
+  opcli wp update 42 43 44 --version "Sprint 7" --dry-run
   opcli wp update 42 --status Closed --comment "Fixed in v1.2"
   opcli wp update 42 --comment-file review.md --attach report.pdf
   opcli wp update 42 --due-date 2026-10-15 --estimate 6h
@@ -495,106 +496,163 @@ nothing new. @login in the text becomes a mention that notifies the user.`,
   opcli wp update 42 --field "Customer=ACME" --field "Tags=urgent,customer"
   opcli wp update 42 --field "Customer="          # clear a custom field`,
 	Params: append([]Param{
-		pID("Work package"),
+		{Name: "id", Kind: String, Required: true, Positional: true, Rest: true, Desc: "Work package id, or several (42 43 44) to apply the same change to each"},
 		{Name: "subject", Kind: String, Desc: "New title"},
 		{Name: "project", Kind: String, Desc: "Move to this project (id, identifier or name)"},
 		{Name: "comment", Kind: String, File: true, Desc: "Also add this comment (Markdown)"},
 		pInternal,
 		pAttach,
 	}, wpFieldParams...),
-	Safety: Write,
+	Safety:  Write,
+	Columns: wpColumns,
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
-		id, err := WorkPackageID(a.String("id"))
+		ids, err := workPackageIDs(a.String("id"))
 		if err != nil {
 			return nil, err
 		}
-		men, err := e.mentionArgs(ctx, a, "description", "comment")
-		if err != nil {
-			return nil, err
+		if len(ids) == 1 {
+			return e.updateWP(ctx, a, ids[0])
 		}
-		files, err := collectFiles(a, "description", "comment")
-		if err != nil {
-			return nil, err
-		}
-		cur, err := e.C.Get(ctx, fmt.Sprintf("/work_packages/%d", id), nil)
-		if err != nil {
-			return nil, err
-		}
-		pid := intOf(hal.IDFromHref(hal.Link(cur, "project")))
-		if a.Has("project") {
-			if pid, err = e.ProjectID(ctx, a.String("project")); err != nil {
-				return nil, err
+		var done []map[string]any
+		var failed []string
+		for _, id := range ids {
+			wa := make(Args, len(a))
+			for k, v := range a {
+				wa[k] = v
 			}
-		}
-		body, err := e.wpPayload(ctx, a, pid)
-		if err != nil {
-			return nil, err
-		}
-		if a.Has("subject") {
-			body["subject"] = a.String("subject")
-		}
-		if a.Has("project") {
-			body["_links"].(map[string]any)["project"] = hal.Ref(href("projects", pid))
-		}
-		body["lockVersion"] = cur["lockVersion"]
-		formPath := fmt.Sprintf("/work_packages/%d/form", id)
-		if err := e.wpFields(ctx, formPath, body, a, pid); err != nil {
-			return nil, err
-		}
-		onlyComment := len(body) == 2 && len(body["_links"].(map[string]any)) == 0
-		if !onlyComment {
-			if err := e.validate(ctx, formPath, body); err != nil {
-				return nil, err
-			}
-		}
-
-		t := e.newAttacher(id)
-		if !files.empty() {
-			texts, err := files.apply(ctx, t, a)
+			wp, err := e.updateWP(ctx, wa, id)
 			if err != nil {
-				return nil, err
+				failed = append(failed, fmt.Sprintf("#%d: %v", id, err))
+				continue
 			}
-			for p, v := range texts {
-				a[p] = v
-			}
-			if d, ok := texts["description"]; ok {
-				body["description"] = hal.Text(d)
-			}
+			done = append(done, compactWP(wp))
 		}
-		res := cur
-		if !onlyComment {
-			q := url.Values{}
-			if !a.Bool("notify") {
-				q.Set("notify", "false")
+		if len(failed) > 0 {
+			ok := make([]string, len(done))
+			for i, wp := range done {
+				ok[i] = fmt.Sprintf("#%v", wp["id"])
 			}
-			for attempt := 0; ; attempt++ {
-				res, err = e.C.JSON(ctx, "PATCH", fmt.Sprintf("/work_packages/%d", id), q, body)
-				if !client.IsConflict(err) || attempt > 0 {
-					break
-				}
-				fresh, err := e.C.Get(ctx, fmt.Sprintf("/work_packages/%d", id), nil)
-				if err != nil {
-					return nil, err
-				}
-				body["lockVersion"] = fresh["lockVersion"]
-			}
-			if err != nil {
-				return nil, err
-			}
+			return nil, fmt.Errorf("%d of %d work packages not updated: %s (updated: %s)",
+				len(failed), len(ids), strings.Join(failed, "; "), strings.Join(ok, ", "))
 		}
-		if c := a.String("comment"); c != "" {
-			if _, err := e.C.Post(ctx, fmt.Sprintf("/work_packages/%d/activities", id), commentBody(c, a)); err != nil {
-				return nil, fmt.Errorf("fields updated but adding the comment failed: %w", err)
-			}
-		}
-		wp := hal.Flatten(res)
-		e.decorateWP(ctx, wp)
-		if len(t.Uploaded) > 0 {
-			wp["uploaded"] = t.Uploaded
-		}
-		men.report(wp)
-		return wp, nil
+		return NewList(done, len(done)), nil
 	},
+}
+
+// workPackageIDs parses "42", "42 43", "42,#43".
+func workPackageIDs(ref string) ([]int, error) {
+	var ids []int
+	for _, f := range strings.FieldsFunc(ref, func(r rune) bool { return r == ',' || r == ' ' }) {
+		id, err := WorkPackageID(f)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("missing work package id")
+	}
+	return ids, nil
+}
+
+// compactWP drops what listings drop (see wpListNoise).
+func compactWP(wp map[string]any) map[string]any {
+	for k, v := range wp {
+		if v == nil || v == "" || wpListNoise[k] {
+			delete(wp, k)
+		}
+	}
+	return wp
+}
+
+// updateWP applies the wp update params to one work package.
+func (e *Env) updateWP(ctx context.Context, a Args, id int) (map[string]any, error) {
+	men, err := e.mentionArgs(ctx, a, "description", "comment")
+	if err != nil {
+		return nil, err
+	}
+	files, err := collectFiles(a, "description", "comment")
+	if err != nil {
+		return nil, err
+	}
+	cur, err := e.C.Get(ctx, fmt.Sprintf("/work_packages/%d", id), nil)
+	if err != nil {
+		return nil, err
+	}
+	pid := intOf(hal.IDFromHref(hal.Link(cur, "project")))
+	if a.Has("project") {
+		if pid, err = e.ProjectID(ctx, a.String("project")); err != nil {
+			return nil, err
+		}
+	}
+	body, err := e.wpPayload(ctx, a, pid)
+	if err != nil {
+		return nil, err
+	}
+	if a.Has("subject") {
+		body["subject"] = a.String("subject")
+	}
+	if a.Has("project") {
+		body["_links"].(map[string]any)["project"] = hal.Ref(href("projects", pid))
+	}
+	body["lockVersion"] = cur["lockVersion"]
+	formPath := fmt.Sprintf("/work_packages/%d/form", id)
+	if err := e.wpFields(ctx, formPath, body, a, pid); err != nil {
+		return nil, err
+	}
+	onlyComment := len(body) == 2 && len(body["_links"].(map[string]any)) == 0
+	if !onlyComment {
+		if err := e.validate(ctx, formPath, body); err != nil {
+			return nil, err
+		}
+	}
+
+	t := e.newAttacher(id)
+	if !files.empty() {
+		texts, err := files.apply(ctx, t, a)
+		if err != nil {
+			return nil, err
+		}
+		for p, v := range texts {
+			a[p] = v
+		}
+		if d, ok := texts["description"]; ok {
+			body["description"] = hal.Text(d)
+		}
+	}
+	res := cur
+	if !onlyComment {
+		q := url.Values{}
+		if !a.Bool("notify") {
+			q.Set("notify", "false")
+		}
+		for attempt := 0; ; attempt++ {
+			res, err = e.C.JSON(ctx, "PATCH", fmt.Sprintf("/work_packages/%d", id), q, body)
+			if !client.IsConflict(err) || attempt > 0 {
+				break
+			}
+			fresh, err := e.C.Get(ctx, fmt.Sprintf("/work_packages/%d", id), nil)
+			if err != nil {
+				return nil, err
+			}
+			body["lockVersion"] = fresh["lockVersion"]
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	if c := a.String("comment"); c != "" {
+		if _, err := e.C.Post(ctx, fmt.Sprintf("/work_packages/%d/activities", id), commentBody(c, a)); err != nil {
+			return nil, fmt.Errorf("fields updated but adding the comment failed: %w", err)
+		}
+	}
+	wp := hal.Flatten(res)
+	e.decorateWP(ctx, wp)
+	if len(t.Uploaded) > 0 {
+		wp["uploaded"] = t.Uploaded
+	}
+	men.report(wp)
+	return wp, nil
 }
 
 var pInternal = Param{Name: "internal", Kind: Bool, Desc: "Internal comment, visible only to roles allowed to see internal comments (Enterprise; enabled per project)"}

@@ -43,7 +43,9 @@ by design: agents drive it from the shell, guided by the embedded skill
   package form schema → `fieldDef`; `--field NAME=VALUE` conversion by type,
   `wp fields`, `customFields` by name on reads, `--field` filters, and
   `validate` (every create/update goes through the form before any upload or
-  write). `mentions.go`: `@login` → `<mention>` tags.
+  write). `mentions.go`: `@login` → `<mention>` tags. `meetings.go`,
+  `reminders.go`; times go through `ParseDateTime` in the user's
+  OpenProject time zone (`Env.location`, from `/my_preferences`).
 - `internal/cli` — generates Cobra commands from ops: params → flags
   (snake_case → kebab-case), `File` params get `--x-file` (path or `-`; the
   file's directory goes to `ops.FileDirKey` for relative images), enums get
@@ -92,6 +94,19 @@ by design: agents drive it from the shell, guided by the embedded skill
   `/principals` has no login filter for others.
 - Internal comments (`"internal": true` on POST activities) need an
   Enterprise plan and the project setting.
+- Meetings: `participants` is a writable link array although the form
+  schema omits it; with explicit participants the author is not added (opcli
+  adds "me"). States draft → open → in_progress → closed/cancelled; outcomes
+  (`kind` information|work_package) need `in_progress`, closed meetings
+  reject agenda changes. List filter `time` takes the value as the operator:
+  `{"time":{"operator":"upcoming"|"past","values":[]}}`; `invited_user_id`.
+- Reminders: one active per user and WP (409), `remindAt` must be future;
+  `GET /reminders` lists only your own.
+- Timers are time entries with `ongoing: true` (needs `spentOn`; one per
+  user). Stopping needs `hours`: the API keeps no start time, so opcli uses
+  `createdAt`, as the web UI does.
+- `/sprints` (17.x agile sprints) is a separate entity, empty with classic
+  Backlogs, where sprints are versions.
 
 ## Development rules
 

@@ -136,3 +136,76 @@ func dateOrClear(a Args, name string) (any, error) {
 func href(kind string, id int) string {
 	return fmt.Sprintf("/api/v3/%s/%d", kind, id)
 }
+
+// ParseDateTime accepts "YYYY-MM-DD HH:MM" (or with a T), a date word
+// followed by a time ("tomorrow 9:30", "+2d 16:00"), a bare time (today), a
+// bare date (09:00 that day), an offset from now ("+2h", "+90m") and RFC
+// 3339 with a zone. Times without a zone are read in loc.
+func ParseDateTime(s string, loc *time.Location) (time.Time, error) {
+	return parseDateTimeAt(s, time.Now().In(loc))
+}
+
+func parseDateTimeAt(s string, now time.Time) (time.Time, error) {
+	s = strings.TrimSpace(s)
+	bad := fmt.Errorf(`invalid date and time %q (use "YYYY-MM-DD HH:MM", "tomorrow 9:30", "16:00", "+2h" or RFC 3339)`, s)
+	if s == "" {
+		return time.Time{}, bad
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t, nil
+	}
+	if s[0] == '+' && !strings.Contains(s, " ") && !strings.HasSuffix(strings.ToLower(s), "d") {
+		h, err := hal.ParseHours(s[1:])
+		if err != nil {
+			return time.Time{}, bad
+		}
+		return now.Add(time.Duration(h * float64(time.Hour))).Truncate(time.Minute), nil
+	}
+	if len(s) > 10 && s[10] == 'T' {
+		s = s[:10] + " " + s[11:]
+	}
+	day, clock, found := strings.Cut(s, " ")
+	if !found && strings.Contains(day, ":") {
+		day, clock = "today", day
+	}
+	d, err := parseDateAt(day, now)
+	if err != nil {
+		return time.Time{}, bad
+	}
+	date, _ := time.ParseInLocation(time.DateOnly, d, now.Location())
+	hh, mm := 9, 0
+	if clock = strings.TrimSpace(clock); clock != "" {
+		c, err := time.Parse("15:04", clock)
+		if err != nil {
+			if c, err = time.Parse("15:04:05", clock); err != nil {
+				return time.Time{}, bad
+			}
+		}
+		hh, mm = c.Hour(), c.Minute()
+	}
+	return time.Date(date.Year(), date.Month(), date.Day(), hh, mm, 0, 0, now.Location()), nil
+}
+
+// location is the time zone of the authenticated user's OpenProject
+// preferences (what the web UI shows); the local zone if it is unset.
+func (e *Env) location(ctx context.Context) *time.Location {
+	e.cache.mu.Lock()
+	loc := e.cache.loc
+	e.cache.mu.Unlock()
+	if loc != nil {
+		return loc
+	}
+	loc = time.Local
+	if res, err := e.C.Get(ctx, "/my_preferences", nil); err == nil {
+		if l, err := time.LoadLocation(hal.String(res["timeZone"])); err == nil && hal.String(res["timeZone"]) != "" {
+			loc = l
+		}
+	}
+	e.cache.mu.Lock()
+	e.cache.loc = loc
+	e.cache.mu.Unlock()
+	return loc
+}
+
+// apiTime formats a time the way the API stores it (UTC).
+func apiTime(t time.Time) string { return t.UTC().Format("2006-01-02T15:04:05Z") }

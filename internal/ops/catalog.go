@@ -4,12 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-
-	"github.com/carlosprados/openproject-cli/internal/hal"
 )
 
-// Reference data (statuses, types, priorities, roles), saved queries and
-// meetings.
+// Reference data (statuses, types, priorities, roles) and saved queries.
 
 func init() {
 	registerGroup(&Group{Name: "status", Aliases: []string{"statuses"}, Short: "Work package statuses"})
@@ -17,8 +14,7 @@ func init() {
 	registerGroup(&Group{Name: "priority", Aliases: []string{"priorities"}, Short: "Work package priorities"})
 	registerGroup(&Group{Name: "role", Aliases: []string{"roles"}, Short: "Roles for project memberships"})
 	registerGroup(&Group{Name: "query", Aliases: []string{"queries", "view"}, Short: "Saved work package queries (views)"})
-	registerGroup(&Group{Name: "meeting", Aliases: []string{"meetings"}, Short: "Meetings"})
-	register(statusList, typeList, priorityList, roleList, queryList, meetingList, meetingGet)
+	register(statusList, typeList, priorityList, roleList, queryList)
 }
 
 var statusList = &Op{
@@ -108,50 +104,5 @@ var queryList = &Op{
 			}
 		}
 		return l, nil
-	},
-}
-
-var meetingList = &Op{
-	Cmd:     []string{"meeting", "list"},
-	Aliases: []string{"ls"},
-	Short:   "List meetings",
-	Example: `  opcli meeting list
-  opcli meeting list -p demo-project`,
-	Params: []Param{
-		pProject("Only meetings of this project (default: all visible)"),
-		pMax(50), pPage,
-	},
-	Columns: []Column{{Header: "ID", Key: "id"}, {Header: "TITLE", Key: "title"}, {Header: "START", Key: "startTime"}, {Header: "DURATION", Key: "duration"}, {Header: "LOCATION", Key: "location"}, {Header: "PROJECT", Key: "project"}, {Header: "STATE", Key: "state"}},
-	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
-		q := url.Values{}
-		if a.Has("project") {
-			pid, err := e.ProjectID(ctx, a.String("project"))
-			if err != nil {
-				return nil, err
-			}
-			q.Set("filters", NewFilters().Add("project_id", "=", pid).JSON())
-		}
-		return e.list(ctx, "/meetings", q, a)
-	},
-}
-
-var meetingGet = &Op{
-	Cmd:     []string{"meeting", "get"},
-	Aliases: []string{"view", "show"},
-	Short:   "Show a meeting with its agenda items",
-	Example: `  opcli meeting get 3`,
-	Params:  []Param{pID("Meeting")},
-	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
-		id := url.PathEscape(a.String("id"))
-		res, err := e.C.Get(ctx, "/meetings/"+id, nil)
-		if err != nil {
-			return nil, err
-		}
-		m := hal.Flatten(res)
-		items, _, err := e.C.Collect(ctx, "/meetings/"+id+"/agenda_items", nil, 0)
-		if err == nil {
-			m["agendaItems"] = hal.FlattenAll(items)
-		}
-		return m, nil
 	},
 }
