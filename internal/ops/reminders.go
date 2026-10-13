@@ -75,7 +75,7 @@ var reminderList = &Op{
 	Short:   "List your active reminders",
 	Example: `  opcli reminder list`,
 	Params:  []Param{pMax(100)},
-	Columns: []Column{{Header: "ID", Key: "id"}, {Header: "REMIND AT", Key: "remindAt"}, {Header: "WP", Key: "remindableId"}, {Header: "WORK PACKAGE", Key: "remindable"}, {Header: "NOTE", Key: "note"}},
+	Columns: []Column{{Header: "ID", Key: "id"}, {Header: "REMIND AT", Key: "remindAt", Fmt: timeFmt}, {Header: "WP", Key: "remindableId"}, {Header: "WORK PACKAGE", Key: "remindable"}, {Header: "NOTE", Key: "note"}},
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
 		l, err := e.list(ctx, "/reminders", nil, a)
 		if err != nil {

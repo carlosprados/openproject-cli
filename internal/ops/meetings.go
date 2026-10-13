@@ -51,7 +51,7 @@ var meetingList = &Op{
 		{Name: "participant", Kind: String, Desc: "Only meetings this user is invited to: me, login, email, name or id"},
 		pMax(50), pPage,
 	},
-	Columns: []Column{{Header: "ID", Key: "id"}, {Header: "TITLE", Key: "title"}, {Header: "START", Key: "startTime"}, {Header: "DURATION", Key: "duration", Fmt: hoursFmt}, {Header: "LOCATION", Key: "location"}, {Header: "PROJECT", Key: "project"}, {Header: "STATE", Key: "state"}},
+	Columns: []Column{{Header: "ID", Key: "id"}, {Header: "TITLE", Key: "title"}, {Header: "START", Key: "startTime", Fmt: timeFmt}, {Header: "DURATION", Key: "duration", Fmt: hoursFmt}, {Header: "LOCATION", Key: "location"}, {Header: "PROJECT", Key: "project"}, {Header: "STATE", Key: "state"}},
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
 		f := NewFilters()
 		if a.Has("project") {
@@ -135,6 +135,11 @@ func renderMeeting(w io.Writer, v any) error {
 	}
 	delete(rec, "agendaItems")
 	rec["duration"] = hal.HoursString(m["duration"])
+	for _, k := range []string{"startTime", "endTime", "createdAt", "updatedAt"} {
+		if _, ok := m[k]; ok {
+			rec[k] = timeFmt(m[k])
+		}
+	}
 	if err := renderRecord(w, rec); err != nil {
 		return err
 	}
