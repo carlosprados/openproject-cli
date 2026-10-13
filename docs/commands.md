@@ -7,8 +7,16 @@ Generated with `opcli docs`. Global flags: `--config`, `--url`, `--api-key`, `-o
 | `opcli api describe` | read-only | Show parameters, body fields and examples of an endpoint |
 | `opcli api endpoints` | read-only | Search the catalogue of API v3 endpoints |
 | `opcli api request` | **destructive** | Call any API v3 endpoint and print the JSON answer |
-| `opcli meeting get` | read-only | Show a meeting with its agenda items |
+| `opcli meeting agenda add` | writes | Add an agenda item (free text or a work package) to a meeting |
+| `opcli meeting agenda delete` | **destructive** | Remove an agenda item |
+| `opcli meeting agenda update` | writes | Change an agenda item |
+| `opcli meeting create` | writes | Schedule a meeting |
+| `opcli meeting delete` | **destructive** | Delete a meeting with its agenda and outcomes |
+| `opcli meeting get` | read-only | Show a meeting with its participants, agenda items and outcomes |
 | `opcli meeting list` | read-only | List meetings |
+| `opcli meeting outcome add` | writes | Record an outcome (decision or follow-up work package) on an agenda item |
+| `opcli meeting outcome delete` | **destructive** | Delete an outcome |
+| `opcli meeting update` | writes | Reschedule a meeting, change its participants or move it along its states |
 | `opcli membership add` | writes | Add a user or group to a project with one or more roles |
 | `opcli membership delete` | **destructive** | Remove a membership (the user loses access to the project) |
 | `opcli membership list` | read-only | List memberships, optionally by project and/or user |
@@ -24,12 +32,17 @@ Generated with `opcli docs`. Global flags: `--config`, `--url`, `--api-key`, `-o
 | `opcli project list` | read-only | List projects |
 | `opcli project update` | writes | Update a project (name, description, status, archive...) |
 | `opcli query list` | read-only | List saved work package queries; run one with 'opcli wp list --query-id <id>' |
+| `opcli reminder delete` | **destructive** | Delete one of your reminders |
+| `opcli reminder list` | read-only | List your active reminders |
 | `opcli role list` | read-only | List roles |
 | `opcli status list` | read-only | List all work package statuses |
 | `opcli time activities` | read-only | List activities valid for time entries (optionally for a work package) |
 | `opcli time delete` | **destructive** | Delete a time entry |
 | `opcli time list` | read-only | List time entries (yours by default) with an hour total |
 | `opcli time log` | writes | Log time on a work package |
+| `opcli time start` | writes | Start a timer on a work package |
+| `opcli time status` | read-only | Show the running timer, if any |
+| `opcli time stop` | writes | Stop the running timer and log the elapsed time |
 | `opcli time update` | writes | Update a time entry |
 | `opcli type list` | read-only | List work package types, globally or enabled in a project |
 | `opcli user get` | read-only | Show a user |
@@ -55,6 +68,7 @@ Generated with `opcli docs`. Global flags: `--config`, `--url`, `--api-key`, `-o
 | `opcli wp relation add` | writes | Relate two work packages |
 | `opcli wp relation delete` | **destructive** | Delete a relation by its id (see 'wp relation list') |
 | `opcli wp relation list` | read-only | List relations of a work package |
+| `opcli wp remind` | writes | Remind yourself about a work package at a given time |
 | `opcli wp update` | writes | Update fields of a work package (status, assignee, dates, ...) |
 | `opcli wp watcher add` | writes | Add a watcher to a work package |
 | `opcli wp watcher list` | read-only | List watchers of a work package |
@@ -133,9 +147,107 @@ Effect: **destructive**
   opcli api request POST news --body-file news.json
 ```
 
+## opcli meeting agenda add
+
+Add an agenda item (free text or a work package) to a meeting
+
+Effect: writes
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Meeting id |
+| `--title` | string |  | Title (optional for a work package item) |
+| `--wp` | string |  | Discuss this work package (id) |
+| `--duration` | string |  | Time slot: 10m, 1h, 0.5 |
+| `--notes` | string |  | Notes (Markdown) |
+| `--presenter` | string |  | Who presents it: me, login, email, name or id ('none' clears) |
+
+```sh
+  opcli meeting agenda add 7 --title "Release status" --duration 10m --presenter jane.doe
+  opcli meeting agenda add 7 --wp 42 --duration 5m
+  opcli meeting agenda add 7 --title "Risks" --notes-file risks.md
+```
+
+## opcli meeting agenda delete
+
+Remove an agenda item
+
+Effect: **destructive**
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Agenda item id |
+
+```sh
+  opcli meeting agenda delete 37 --yes
+```
+
+## opcli meeting agenda update
+
+Change an agenda item
+
+Effect: writes
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Agenda item id |
+| `--title` | string |  | Title (optional for a work package item) |
+| `--wp` | string |  | Discuss this work package (id) |
+| `--duration` | string |  | Time slot: 10m, 1h, 0.5 |
+| `--notes` | string |  | Notes (Markdown) |
+| `--presenter` | string |  | Who presents it: me, login, email, name or id ('none' clears) |
+
+```sh
+  opcli meeting agenda update 37 --duration 15m --notes "Moved to Friday"
+  opcli meeting agenda update 37 --presenter none
+```
+
+## opcli meeting create
+
+Schedule a meeting
+
+Schedule a one-off meeting in a project. You are added to the participants;
+--participant invites others. New meetings start as a draft; '--state open'
+opens it at once. The server validates the meeting before it is created.
+
+Add the agenda afterwards with 'opcli meeting agenda add'.
+
+Effect: writes
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--project` | string |  | Project id, identifier or name (default: configured project) |
+| `--participant` | list |  | Invite these users (me, login, email, name or id) |
+| `--state` | string |  | Initial state (default: draft) |
+| `--title` | string |  | Title |
+| `--start` | string |  | Start: "YYYY-MM-DD HH:MM", "tomorrow 9:30", "16:00", "+2h" (your OpenProject time zone) |
+| `--duration` | string |  | Duration: 45m, 1h30m, 1.5 (hours) |
+| `--location` | string |  | Room or video call link (Google Meet, Teams, ...) |
+| `--notify` | bool |  | Email the participants about this change |
+
+```sh
+  opcli meeting create --title "Sprint review" --start "2026-10-20 10:00" --duration 45m \
+    --location https://meet.google.com/abc-defg-hij --participant jane.doe,john.roe
+  opcli meeting create -p demo-project --title "Kick-off" --start "tomorrow 9:30" --state open --notify
+```
+
+## opcli meeting delete
+
+Delete a meeting with its agenda and outcomes
+
+Effect: **destructive**
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Meeting id |
+
+```sh
+  opcli meeting delete 7 --yes
+```
+
 ## opcli meeting get
 
-Show a meeting with its agenda items
+Show a meeting with its participants, agenda items and outcomes
 
 Effect: read-only
 
@@ -156,12 +268,81 @@ Effect: read-only
 | Flag | Type | Default | Description |
 |---|---|---|---|
 | `--project` | string |  | Only meetings of this project (default: all visible) |
+| `--when` | string |  | upcoming (not yet ended, soonest first) or past (started before now, latest first) |
+| `--participant` | string |  | Only meetings this user is invited to: me, login, email, name or id |
 | `--max` | int | `50` | Maximum number of results (0 = all) |
 | `--page` | int |  | Fetch only this page (1-based) of size --max instead of paging automatically |
 
 ```sh
-  opcli meeting list
-  opcli meeting list -p demo-project
+  opcli meeting list --when upcoming
+  opcli meeting list --when upcoming --participant me
+  opcli meeting list -p demo-project --when past --max 10
+```
+
+## opcli meeting outcome add
+
+Record an outcome (decision or follow-up work package) on an agenda item
+
+Record what came out of an agenda item: --notes for a decision or
+information, --wp to link a follow-up work package (create it first with
+'opcli wp create'). The meeting must be in progress
+('opcli meeting update <id> --state in_progress').
+
+Effect: writes
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Agenda item id |
+| `--notes` | string |  | What was decided (Markdown) |
+| `--wp` | string |  | Follow-up work package id |
+
+```sh
+  opcli meeting outcome add 37 --notes "Release moves to Friday"
+  opcli meeting outcome add 37 --wp 51 --notes "Jane prepares the migration"
+```
+
+## opcli meeting outcome delete
+
+Delete an outcome
+
+Effect: **destructive**
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Outcome id |
+
+```sh
+  opcli meeting outcome delete 2 --yes
+```
+
+## opcli meeting update
+
+Reschedule a meeting, change its participants or move it along its states
+
+Change only what you pass. --participant adds users and
+--remove-participant removes them. --state moves the meeting along
+draft → open → in_progress → closed (or cancelled); outcomes can only be
+recorded while it is in_progress.
+
+Effect: writes
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Meeting id |
+| `--participant` | list |  | Add these users (me, login, email, name or id) |
+| `--remove-participant` | list |  | Remove these users |
+| `--state` | string |  | New state |
+| `--title` | string |  | Title |
+| `--start` | string |  | Start: "YYYY-MM-DD HH:MM", "tomorrow 9:30", "16:00", "+2h" (your OpenProject time zone) |
+| `--duration` | string |  | Duration: 45m, 1h30m, 1.5 (hours) |
+| `--location` | string |  | Room or video call link (Google Meet, Teams, ...) |
+| `--notify` | bool |  | Email the participants about this change |
+
+```sh
+  opcli meeting update 7 --start "2026-10-21 10:00" --notify
+  opcli meeting update 7 --participant jane.doe --remove-participant john.roe
+  opcli meeting update 7 --state in_progress
+  opcli meeting update 7 --location https://teams.microsoft.com/l/meetup-join/...
 ```
 
 ## opcli membership add
@@ -414,6 +595,34 @@ Effect: read-only
   opcli wp list --query-id 5
 ```
 
+## opcli reminder delete
+
+Delete one of your reminders
+
+Effect: **destructive**
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Reminder id |
+
+```sh
+  opcli reminder delete 3 --yes
+```
+
+## opcli reminder list
+
+List your active reminders
+
+Effect: read-only
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--max` | int | `100` | Maximum number of results (0 = all) |
+
+```sh
+  opcli reminder list
+```
+
 ## opcli role list
 
 List roles
@@ -512,6 +721,59 @@ Effect: writes
   opcli time log --wp 42 --hours 1.5 --comment "Code review"
   opcli time log --wp 42 --hours 2h --date yesterday --activity Development
   opcli time log --wp 42 --hours 45m --user jane.doe      # admins: on behalf of others
+```
+
+## opcli time start
+
+Start a timer on a work package
+
+Start tracking time on a work package now. 'opcli time stop' logs the
+elapsed time. Only one timer runs at a time, and it is the same timer the
+web UI shows: stop the running one first.
+
+Effect: writes
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<wp>` (arg) | string |  | **required** Work package id |
+| `--comment` | string |  | What you are doing |
+| `--activity` | string |  | Activity name or id |
+
+```sh
+  opcli time start 42
+  opcli time start 42 --activity Development --comment "Code review"
+```
+
+## opcli time status
+
+Show the running timer, if any
+
+Effect: read-only
+
+```sh
+  opcli time status
+```
+
+## opcli time stop
+
+Stop the running timer and log the elapsed time
+
+Stop the running timer: it becomes a time entry with the time elapsed
+since it started, rounded to the minute. --hours logs a different amount;
+--comment and --activity fill what the start left empty.
+
+Effect: writes
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--hours` | string |  | Log this instead of the elapsed time: 1.5, 90m, 1h30m |
+| `--comment` | string |  | What was done |
+| `--activity` | string |  | Activity name or id |
+
+```sh
+  opcli time stop
+  opcli time stop --comment "Reviewed the PR" --activity Development
+  opcli time stop --hours 1h15m
 ```
 
 ## opcli time update
@@ -1088,6 +1350,31 @@ Effect: read-only
   opcli wp relation list 42
 ```
 
+## opcli wp remind
+
+Remind yourself about a work package at a given time
+
+Set a personal reminder: at that time OpenProject notifies you (in-app
+and by email, as your notification settings say). Only you see it.
+
+You can have one active reminder per work package: setting another one
+moves the existing reminder to the new time (and note, if given). A bare
+date means 09:00 that day; times are in your OpenProject time zone.
+
+Effect: writes
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Work package id |
+| `--at` | string |  | **required** When: "YYYY-MM-DD HH:MM", "tomorrow 9:00", "16:00", "+2h", a date (09:00) |
+| `--note` | string |  | Why (shown in the notification) |
+
+```sh
+  opcli wp remind 42 --at "tomorrow 9:00" --note "Call the customer"
+  opcli wp remind 42 --at "2026-10-20 16:30"
+  opcli wp remind 42 --at +2h
+```
+
 ## opcli wp update
 
 Update fields of a work package (status, assignee, dates, ...)
@@ -1107,11 +1394,15 @@ uploaded after that check (see 'wp create'); a file already attached with
 the same name and size is reused, so re-running the same update attaches
 nothing new. @login in the text becomes a mention that notifies the user.
 
+Several ids apply the same change to each, one after the other; each one
+is validated on its own, and the error names the ones that failed and the
+ones that were updated. Run it with --dry-run first.
+
 Effect: writes
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `<id>` (arg) | string |  | **required** Work package id |
+| `<id>` (arg) | string |  | **required** Work package id, or several (42 43 44) to apply the same change to each |
 | `--subject` | string |  | New title |
 | `--project` | string |  | Move to this project (id, identifier or name) |
 | `--comment` | string |  | Also add this comment (Markdown) |
@@ -1137,6 +1428,7 @@ Effect: writes
 
 ```sh
   opcli wp update 42 --status "In progress" --assignee me
+  opcli wp update 42 43 44 --version "Sprint 7" --dry-run
   opcli wp update 42 --status Closed --comment "Fixed in v1.2"
   opcli wp update 42 --comment-file review.md --attach report.pdf
   opcli wp update 42 --due-date 2026-10-15 --estimate 6h

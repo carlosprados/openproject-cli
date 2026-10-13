@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/carlosprados/openproject-cli/internal/client"
 	"github.com/carlosprados/openproject-cli/internal/hal"
@@ -23,6 +24,7 @@ type resolverCache struct {
 	projects map[string]int
 	me       int
 	schemas  map[string]map[string]string // "project-type" → customFieldN → name
+	loc      *time.Location
 }
 
 type named struct {

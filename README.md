@@ -36,8 +36,12 @@ Tested against OpenProject 17.8 (API v3).
   package).
 - **Backfill**: `opcli wp backfill` records work done without planning or
   logging — real dates, hours spread over working days, an audit comment.
-- **Time tracking**: log, list with totals and grouping (day/project/wp/activity/user), update, delete.
-- **Projects, versions, memberships, users, notifications, saved queries, meetings**,
+- **Time tracking**: log, list with totals and grouping (day/project/wp/activity/user), update, delete,
+  and a start/stop timer shared with the web UI.
+- **Meetings**: schedule with participants and a video call link, agenda items
+  (free text or work packages), states, and outcomes linked to follow-up work.
+- **Reminders** on work packages, and **bulk updates** (`wp update 42 43 44 …`).
+- **Projects, versions, memberships, users, notifications, saved queries**,
   plus reference data (statuses, types, priorities, roles).
 - **Names instead of ids** everywhere: `--project website`, `--status "In progress"`,
   `--assignee me`, `--type Bug`, `--due-date +7d`, `--hours 1h30m`. Ambiguous or
@@ -107,6 +111,10 @@ cat spec.md | opcli wp create --subject "SSO epic" --type Epic --description-fil
 opcli wp relation add 43 --type follows --to 42
 opcli wp backfill -p website --subject "Hotfix" --assignee jane --from 2026-09-14 --to 2026-09-18 --hours 12h --dry-run  # unplanned work, real dates
 opcli time list --from month --group-by project
+opcli time start 42 && opcli time stop             # timer
+opcli wp remind 42 --at "tomorrow 9:00" --note "Call the customer"
+opcli meeting create -p website --title "Review" --start "2026-10-20 10:00" --duration 45m --location <meet-link> --participant jane
+opcli meeting agenda add 7 --wp 42 --duration 10m
 opcli notification list
 opcli api describe POST /api/v3/news && opcli api request POST news --body-file news.json
 ```
@@ -127,7 +135,7 @@ covers every command, the JSON shapes, Markdown, images and mentions, custom
 fields by name, `--dry-run` and the server-side validation of every write,
 the destructive `--yes` rule, what opcli cannot do, the errors and recipes for common requests
 (my day, triage, status report, logging time from free text, timesheet review,
-turning notes into work packages).
+meeting minutes, turning notes into work packages).
 
 The MCP server of v0.3 and earlier is gone: stay on v0.3.0 if you need it.
 

@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/carlosprados/openproject-cli/internal/hal"
 )
@@ -20,9 +21,13 @@ func init() {
 		Long: `Time entries record hours spent on a work package.
 
 Hours accept 1.5, 1,5, 90m, 1h30m or PT1H30M. Dates accept YYYY-MM-DD,
-today, yesterday, week (this Monday), month (1st of this month) or -Nd.`,
+today, yesterday, week (this Monday), month (1st of this month) or -Nd.
+
+'time start' runs a timer on a work package and 'time stop' turns it into
+a time entry with the elapsed time (one timer at a time, shared with the
+web UI).`,
 	})
-	register(timeList, timeLog, timeUpdate, timeDelete, timeActivities)
+	register(timeList, timeLog, timeUpdate, timeDelete, timeActivities, timeStart, timeStop, timeStatus)
 }
 
 // TimeList is a List of time entries plus their hour total.
@@ -183,6 +188,9 @@ var timeLog = &Op{
 			return nil, err
 		}
 		body["_links"].(map[string]any)["entity"] = hal.Ref(href("work_packages", wp))
+		if err := e.validate(ctx, "/time_entries/form", body); err != nil {
+			return nil, err
+		}
 		res, err := e.C.Post(ctx, "/time_entries", body)
 		if err != nil {
 			return nil, err
@@ -229,6 +237,9 @@ var timeUpdate = &Op{
 		}
 		if a.Has("wp") {
 			body["_links"].(map[string]any)["entity"] = hal.Ref(href("work_packages", wp))
+		}
+		if err := e.validate(ctx, "/time_entries/"+url.PathEscape(id)+"/form", body); err != nil {
+			return nil, err
 		}
 		res, err := e.C.Patch(ctx, "/time_entries/"+url.PathEscape(id), body)
 		if err != nil {
@@ -320,4 +331,146 @@ var timeActivities = &Op{
 		}
 		return NewList(items, len(items)), nil
 	},
+}
+
+var timeStart = &Op{
+	Cmd:   []string{"time", "start"},
+	Short: "Start a timer on a work package",
+	Long: `Start tracking time on a work package now. 'opcli time stop' logs the
+elapsed time. Only one timer runs at a time, and it is the same timer the
+web UI shows: stop the running one first.`,
+	Example: `  opcli time start 42
+  opcli time start 42 --activity Development --comment "Code review"`,
+	Params: []Param{
+		{Name: "wp", Kind: String, Required: true, Positional: true, Desc: "Work package id"},
+		{Name: "comment", Kind: String, Short: "m", Desc: "What you are doing"},
+		{Name: "activity", Kind: String, Desc: "Activity name or id"},
+	},
+	Safety: Write,
+	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
+		wp, err := WorkPackageID(a.String("wp"))
+		if err != nil {
+			return nil, err
+		}
+		if cur, err := e.runningTimer(ctx); err != nil {
+			return nil, err
+		} else if cur != nil {
+			return nil, fmt.Errorf("a timer is already running on #%d %s since %s: stop it first with 'opcli time stop'",
+				intOf(hal.IDFromHref(hal.Link(cur, "entity"))), linkTitle(cur, "entity"), hal.String(cur["createdAt"]))
+		}
+		body, err := e.timePayload(ctx, a, wp)
+		if err != nil {
+			return nil, err
+		}
+		body["_links"].(map[string]any)["entity"] = hal.Ref(href("work_packages", wp))
+		body["ongoing"] = true
+		body["spentOn"] = time.Now().In(e.location(ctx)).Format(time.DateOnly)
+		if err := e.validate(ctx, "/time_entries/form", body); err != nil {
+			return nil, err
+		}
+		res, err := e.C.Post(ctx, "/time_entries", body)
+		if err != nil {
+			return nil, err
+		}
+		te := hal.Flatten(res)
+		delete(te, "_type")
+		return te, nil
+	},
+}
+
+var timeStop = &Op{
+	Cmd:   []string{"time", "stop"},
+	Short: "Stop the running timer and log the elapsed time",
+	Long: `Stop the running timer: it becomes a time entry with the time elapsed
+since it started, rounded to the minute. --hours logs a different amount;
+--comment and --activity fill what the start left empty.`,
+	Example: `  opcli time stop
+  opcli time stop --comment "Reviewed the PR" --activity Development
+  opcli time stop --hours 1h15m`,
+	Params: []Param{
+		{Name: "hours", Kind: String, Short: "H", Desc: "Log this instead of the elapsed time: 1.5, 90m, 1h30m"},
+		{Name: "comment", Kind: String, Short: "m", Desc: "What was done"},
+		{Name: "activity", Kind: String, Desc: "Activity name or id"},
+	},
+	Safety: Write,
+	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
+		cur, err := e.runningTimer(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if cur == nil {
+			return nil, fmt.Errorf("no timer is running (start one with 'opcli time start <wp>')")
+		}
+		wp := intOf(hal.IDFromHref(hal.Link(cur, "entity")))
+		body, err := e.timePayload(ctx, a, wp)
+		if err != nil {
+			return nil, err
+		}
+		if !a.Has("hours") {
+			body["hours"] = hal.ISOHours(math.Max(elapsedHours(cur, time.Now()), 1.0/60))
+		}
+		body["ongoing"] = false
+		id := intOf(cur["id"])
+		if err := e.validate(ctx, fmt.Sprintf("/time_entries/%d/form", id), body); err != nil {
+			return nil, err
+		}
+		res, err := e.C.Patch(ctx, fmt.Sprintf("/time_entries/%d", id), body)
+		if err != nil {
+			return nil, err
+		}
+		te := hal.Flatten(res)
+		delete(te, "_type")
+		return te, nil
+	},
+}
+
+var timeStatus = &Op{
+	Cmd:     []string{"time", "status"},
+	Aliases: []string{"timer"},
+	Short:   "Show the running timer, if any",
+	Example: `  opcli time status`,
+	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
+		cur, err := e.runningTimer(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if cur == nil {
+			return map[string]any{"running": false}, nil
+		}
+		te := hal.Flatten(cur)
+		delete(te, "_type")
+		te["running"] = true
+		te["elapsed"] = hal.ISOHours(elapsedHours(cur, time.Now()))
+		return te, nil
+	},
+}
+
+// runningTimer returns the authenticated user's ongoing time entry, or nil.
+func (e *Env) runningTimer(ctx context.Context) (map[string]any, error) {
+	me, err := e.MeID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	f := NewFilters().Add("ongoing", "=", "t").Add("user", "=", me)
+	items, _, err := e.C.Collect(ctx, "/time_entries", url.Values{"filters": {f.JSON()}}, 1)
+	if err != nil || len(items) == 0 {
+		return nil, err
+	}
+	return items[0], nil
+}
+
+// elapsedHours is the time since a timer started; the API keeps no start
+// time for timers, so createdAt is the start (as in the web UI).
+func elapsedHours(te map[string]any, now time.Time) float64 {
+	start, err := time.Parse(time.RFC3339, hal.String(te["createdAt"]))
+	if err != nil {
+		return 0
+	}
+	return now.Sub(start).Hours()
+}
+
+func linkTitle(res map[string]any, name string) string {
+	links, _ := res["_links"].(map[string]any)
+	l, _ := links[name].(map[string]any)
+	return hal.String(l["title"])
 }
