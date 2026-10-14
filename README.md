@@ -29,7 +29,13 @@ Tested against OpenProject 17.8 (API v3).
 - **Work packages**: list/search with filters, view (description, relations,
   children, attachments, history), create, update, delete, comment and edit
   comments, allowed values (workflow-aware status transitions), relations,
-  watchers, attachments, parent/child hierarchies.
+  watchers, attachments, parent/child hierarchies. Date filters
+  (`--updated-after`, `--due-before`, `--closed-after`…), `statusIsClosed` on
+  every item, and full exports (`--max 0`) paged in parallel that survive a
+  page the server cannot render.
+- **Flow metrics**: `opcli wp flow` — throughput per week, cycle and lead time
+  (p50/p85) and time per status of what was closed in a period, with each
+  work package's status history.
 - **Markdown with images**: `![shot](shot.png)` in a description or comment is
   uploaded as an attachment and rendered; `--attach` sends files along with a
   create or update (on create they are claimed atomically by the new work
@@ -99,7 +105,8 @@ Common recipes:
 
 ```sh
 opcli wp list -p website --type Bug --search "timeout"
-opcli wp list --status all --filter '[{"updatedAt":{"operator":">t-","values":["3"]}}]'
+opcli wp list --status all --updated-after -3d
+opcli wp flow -p website --since 12w             # throughput and cycle time
 opcli wp get 42 --activities
 opcli wp allowed 42 --field status                 # valid transitions right now
 opcli wp fields -p website --type Bug              # fields, custom ones included, and their values

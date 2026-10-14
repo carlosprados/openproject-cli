@@ -284,7 +284,12 @@ func TestListWorkPackagesBuildsFiltersAndCompacts(t *testing.T) {
 	if _, ok := l.Items[0]["description"]; ok {
 		t.Error("description should be dropped from listings")
 	}
-	q := f.requests[len(f.requests)-1]
+	var q string
+	for _, r := range f.requests {
+		if strings.HasPrefix(r, "GET /api/v3/work_packages?") {
+			q = r
+		}
+	}
 	for _, want := range []string{`%22status%22%3A%7B%22operator%22%3A%22c%22`, `%22assignee%22%3A%7B%22operator%22%3A%22%3D%22%2C%22values%22%3A%5B%22me%22%5D`} {
 		if !strings.Contains(q, want) {
 			t.Errorf("query %s lacks %s", q, want)

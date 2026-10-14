@@ -78,12 +78,17 @@ func (r *Recorder) record(c *Client, method, path string, query url.Values, body
 	return []byte(`{"id":0}`)
 }
 
+// RequestTimeout bounds one request. It is generous because a full page
+// of work packages (MaxPageSize, schemas embedded) takes half a minute on
+// a busy server; an unreachable one still fails at connect time.
+const RequestTimeout = 3 * time.Minute
+
 // New builds a client for baseURL (e.g. https://op.example.com) using apiKey.
 func New(baseURL, apiKey string) *Client {
 	return &Client{
 		BaseURL:   strings.TrimRight(baseURL, "/"),
 		APIKey:    apiKey,
-		HTTP:      &http.Client{Timeout: 30 * time.Second},
+		HTTP:      &http.Client{Timeout: RequestTimeout},
 		UserAgent: "opcli",
 	}
 }
@@ -274,35 +279,104 @@ func decodeError(status int, data []byte) error {
 	return e
 }
 
+// MaxPageSize is the page size Collect asks for when it pages through a
+// whole collection: OpenProject's default ceiling (apiv3_max_page_size).
+// A server configured lower answers with its own pageSize, which wins.
+const MaxPageSize = 1000
+
+// CollectParallel is how many pages Collect fetches at once once it knows
+// the total.
+const CollectParallel = 4
+
+// PageFallback recovers the elements of a page whose request failed. It
+// gets the page's query (offset and pageSize set) and the error, and
+// returns the elements and the collection total; returning an error fails
+// the whole Collect.
+type PageFallback func(ctx context.Context, q url.Values, err error) ([]map[string]any, int, error)
+
 // Collect pages through a collection endpoint until max elements (max <= 0:
 // everything) and returns the elements plus the server-side total.
 func (c *Client) Collect(ctx context.Context, path string, query url.Values, max int) ([]map[string]any, int, error) {
-	q := url.Values{}
-	for k, v := range query {
-		q[k] = v
-	}
-	pageSize := 100
-	if max > 0 && max < pageSize {
-		pageSize = max
-	}
-	if max > 100 {
-		pageSize = min(max, 1000)
-	}
-	q.Set("pageSize", strconv.Itoa(pageSize))
+	return c.CollectWith(ctx, path, query, max, nil)
+}
 
-	var out []map[string]any
-	total := 0
-	for page := 1; ; page++ {
-		q.Set("offset", strconv.Itoa(page))
+// CollectWith is Collect with a fallback for pages that fail. The first page
+// gives the total; the rest are fetched CollectParallel at a time and
+// returned in order, without elements repeated across pages (offset paging
+// shifts when the collection changes meanwhile).
+func (c *Client) CollectWith(ctx context.Context, path string, query url.Values, max int, fallback PageFallback) ([]map[string]any, int, error) {
+	pageSize := MaxPageSize
+	if max > 0 {
+		pageSize = min(max, MaxPageSize)
+	}
+	page := func(offset, size int) ([]map[string]any, int, int, error) {
+		q := url.Values{}
+		for k, v := range query {
+			q[k] = v
+		}
+		q.Set("pageSize", strconv.Itoa(size))
+		q.Set("offset", strconv.Itoa(offset))
 		res, err := c.Get(ctx, path, q)
 		if err != nil {
-			return nil, 0, err
+			if fallback == nil || ctx.Err() != nil {
+				return nil, 0, 0, err
+			}
+			elems, total, ferr := fallback(ctx, q, err)
+			return elems, total, size, ferr
 		}
-		total = toInt(res["total"])
-		elems := Elements(res)
-		out = append(out, elems...)
-		if len(elems) == 0 || len(elems) < pageSize || (max > 0 && len(out) >= max) || len(out) >= total {
-			break
+		served := toInt(res["pageSize"])
+		if served <= 0 || served > size {
+			served = size
+		}
+		return Elements(res), toInt(res["total"]), served, nil
+	}
+
+	first, total, size, err := page(1, pageSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	want := total
+	if max > 0 {
+		want = min(max, total)
+	}
+	pages := (want + size - 1) / size
+	if pages < 1 {
+		pages = 1
+	}
+	results := make([][]map[string]any, pages)
+	results[0] = first
+	if pages > 1 {
+		errs := make([]error, pages)
+		sem := make(chan struct{}, CollectParallel)
+		done := make(chan struct{})
+		for p := 2; p <= pages; p++ {
+			go func(p int) {
+				sem <- struct{}{}
+				defer func() { <-sem; done <- struct{}{} }()
+				results[p-1], _, _, errs[p-1] = page(p, size)
+			}(p)
+		}
+		for p := 2; p <= pages; p++ {
+			<-done
+		}
+		for _, err := range errs {
+			if err != nil {
+				return nil, 0, err
+			}
+		}
+	}
+
+	var out []map[string]any
+	seen := map[any]bool{}
+	for _, elems := range results {
+		for _, el := range elems {
+			if id, ok := el["id"]; ok && id != nil {
+				if seen[id] {
+					continue
+				}
+				seen[id] = true
+			}
+			out = append(out, el)
 		}
 	}
 	if max > 0 && len(out) > max {

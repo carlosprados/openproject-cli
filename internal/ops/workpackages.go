@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -27,7 +28,7 @@ Use 'opcli wp allowed <id>' to see which statuses, types, priorities,
 versions... a given work package accepts (workflows restrict transitions).`,
 	})
 
-	register(wpList, wpGet, wpCreate, wpUpdate, wpDelete, wpComment, wpCommentEdit, wpActivities, wpAllowed, wpFieldsOp)
+	register(wpList, wpGet, wpCreate, wpUpdate, wpDelete, wpComment, wpCommentEdit, wpActivities, wpAllowed, wpFieldsOp, wpFlow)
 }
 
 var wpColumns = []Column{
@@ -59,15 +60,34 @@ subject, description and comments.
 by name, "NAME=" finds empty ones). It needs a project. Custom fields come
 back by name under "customFields".
 
+Date flags take YYYY-MM-DD, today, yesterday, week, month or -7d, and both
+ends are inclusive: --updated-after/--updated-before, --created-after/
+--created-before, --due-after/--due-before. --closed-after/--closed-before
+keep the work packages whose last close (entry into a closed status) falls in
+the range: they imply --status closed, read each candidate's history (one
+request per work package updated since --closed-after) and add closedAt.
+
+Each item carries statusIsClosed and statusCategory (todo: the default
+status, done: closed statuses, doing: the rest).
+
 --filter takes raw API filters (JSON) for anything not covered by flags, e.g.
   [{"dueDate":{"operator":"<t+","values":["7"]}}]
-See 'opcli help filters' for operators. --query-id runs a saved query instead.`,
+See 'opcli help filters' for operators. --query-id runs a saved query instead.
+
+--max 0 reads everything, 1000 per page and several pages at once, paging in
+creation order so that updates made meanwhile lose nothing (--sort is then applied
+locally for id, updatedAt, createdAt, startDate, dueDate and subject). A page the
+server fails to render (HTTP 5xx, e.g. a type whose form configuration is
+broken) is re-read by id and the loss, if any, reported on stderr.`,
 	Example: `  opcli wp list                                  # open WPs, default project
   opcli wp list --assignee me --project all      # my open work, everywhere
   opcli wp list -p demo-project --type Bug --status all
   opcli wp list --search "login timeout" --max 10
   opcli wp list --status "In progress,On hold" --sort dueDate:asc
   opcli wp list -p demo-project --field "Customer=ACME" --field "Billable=yes"
+  opcli wp list --updated-after -7d --status all
+  opcli wp list --due-before today               # overdue (open)
+  opcli wp list -p all --closed-after 2026-09-01 -o json
   opcli wp list --filter '[{"dueDate":{"operator":"<t+","values":["7"]}}]'
   opcli wp list --query-id 12                    # run a saved query
   opcli wp list --assignee me -o json            # machine-readable`,
@@ -83,6 +103,14 @@ See 'opcli help filters' for operators. --query-id runs a saved query instead.`,
 		{Name: "parent", Kind: String, Desc: "Only direct children of this work package id"},
 		{Name: "search", Kind: String, Short: "q", Desc: "Full-text search in subject, description and comments"},
 		{Name: "field", Kind: Strings, Desc: `Filter by any field by name, NAME=VALUE (repeatable): "Customer=ACME", "Area=Backend,Ops"; "NAME=" means empty; needs a project`},
+		{Name: "updated_after", Kind: String, Desc: "Updated on or after this date (YYYY-MM-DD, today, week, month, -7d)"},
+		{Name: "updated_before", Kind: String, Desc: "Updated on or before this date"},
+		{Name: "created_after", Kind: String, Desc: "Created on or after this date"},
+		{Name: "created_before", Kind: String, Desc: "Created on or before this date"},
+		{Name: "due_after", Kind: String, Desc: "Due (finish date) on or after this date"},
+		{Name: "due_before", Kind: String, Desc: "Due (finish date) on or before this date"},
+		{Name: "closed_after", Kind: String, Desc: "Last closed on or after this date (implies --status closed; reads each candidate's history)"},
+		{Name: "closed_before", Kind: String, Desc: "Last closed on or before this date (implies --status closed)"},
 		{Name: "filter", Kind: String, Desc: "Extra raw API filters as a JSON array (see 'opcli help filters')"},
 		{Name: "sort", Kind: String, Default: "updatedAt:desc", Desc: "Sort spec field:asc|desc, comma-separated (id, subject, updatedAt, dueDate, priority, status...)"},
 		{Name: "query_id", Kind: Int, Desc: "Run a saved query by id (other filters are ignored)"},
@@ -104,8 +132,24 @@ See 'opcli help filters' for operators. --query-id runs a saved query instead.`,
 			f = f.Add("project", "=", projectID)
 		}
 
+		closedFrom, err := ParseDate(a.String("closed_after"))
+		if err != nil {
+			return nil, err
+		}
+		closedTo, err := ParseDate(a.String("closed_before"))
+		if err != nil {
+			return nil, err
+		}
+		byClose := closedFrom != "" || closedTo != ""
+		if byClose && a.Int("page") > 0 {
+			return nil, fmt.Errorf("--page cannot be combined with --closed-after/--closed-before")
+		}
 		switch st := strings.ToLower(a.String("status")); st {
 		case "", "open":
+			if byClose {
+				f = f.Add("status", "c")
+				break
+			}
 			f = f.Add("status", "o")
 		case "closed":
 			f = f.Add("status", "c")
@@ -157,29 +201,68 @@ See 'opcli help filters' for operators. --query-id runs a saved query instead.`,
 		if s := a.String("search"); s != "" {
 			f = f.Add("search", "**", s)
 		}
-		f, err := e.fieldFilters(ctx, f, rawStrings(a["field"]), projectID)
-		if err != nil {
+		// A work package closed on D was last updated on D or later.
+		if f, err = dateFilter(f, "updatedAt", later(a.String("updated_after"), closedFrom), a.String("updated_before")); err != nil {
+			return nil, err
+		}
+		if f, err = dateFilter(f, "createdAt", a.String("created_after"), a.String("created_before")); err != nil {
+			return nil, err
+		}
+		if f, err = dateFilter(f, "dueDate", a.String("due_after"), a.String("due_before")); err != nil {
+			return nil, err
+		}
+		if f, err = e.fieldFilters(ctx, f, rawStrings(a["field"]), projectID); err != nil {
 			return nil, err
 		}
 		if f, err = f.Merge(a.String("filter")); err != nil {
 			return nil, err
 		}
+		la := a
+		if byClose {
+			la = Args{"max": 0}
+		}
+		// Offset paging over a live server loses one element per work
+		// package updated meanwhile when sorted by updatedAt (it jumps to an
+		// already-read page). A full read pages in creation order, which
+		// updates do not change, and sorts locally when the sort keys allow
+		// it.
+		fullRead := la.Int("max") <= 0 && la.Int("page") <= 0
+		sortSpec := a.String("sort")
+		sortLocally := fullRead && locallySortable(sortSpec)
 		q := url.Values{"filters": {f.JSON()}}
-		if s := a.String("sort"); s != "" {
-			sb, err := sortBy(s)
+		if sortLocally {
+			q.Set("sortBy", stableSort)
+		} else if sortSpec != "" {
+			sb, err := sortBy(sortSpec)
 			if err != nil {
 				return nil, err
 			}
 			q.Set("sortBy", sb)
 		}
-		l, err := e.list(ctx, "/work_packages", q, a)
+		l, err := e.listWith(ctx, "/work_packages", q, la, e.wpPageFallback("/work_packages"))
 		if err != nil {
 			if strings.Contains(err.Error(), "filter does not exist") && a.Has("field") {
 				return nil, fmt.Errorf("%w: OpenProject cannot filter by this field (user and version custom fields are not filterable); filter by another field and check the value with jq", err)
 			}
 			return nil, err
 		}
+		if fullRead && l.Count < l.Total {
+			e.warnf("read %d of %d work packages: the collection changed while paging (deleted work packages, or a sort other than id, updatedAt, createdAt, startDate, dueDate, subject); run again if the count matters", l.Count, l.Total)
+		}
+		if sortLocally {
+			sortWPs(l.Items, sortSpec)
+		}
 		e.decorateWPs(ctx, l.Items)
+		if byClose {
+			var kept []map[string]any
+			for _, h := range e.closedBetween(ctx, l.Items, closedFrom, closedTo) {
+				kept = append(kept, h.WP)
+			}
+			if max := a.Int("max"); max > 0 && len(kept) > max {
+				return &List{Total: len(kept), Count: max, Items: kept[:max]}, nil
+			}
+			l = NewList(kept, len(kept))
+		}
 		return l, nil
 	},
 }
@@ -201,6 +284,94 @@ func (e *Env) runSavedQuery(ctx context.Context, id int, a Args) (*List, error) 
 	l := NewList(hal.FlattenAll(client.Elements(results)), intOf(results["total"]))
 	e.decorateWPs(ctx, l.Items)
 	return l, nil
+}
+
+// stableSort pages a collection in an order that updates do not change.
+// Not by id alone: OpenProject 17.8 has been seen answering
+// sortBy=[["id","asc"]] in a different order on every request.
+const stableSort = `[["createdAt","asc"],["id","asc"]]`
+
+// Sort keys whose flattened values order correctly as they are.
+var localSortKeys = map[string]bool{"id": true, "updatedAt": true, "createdAt": true, "startDate": true, "dueDate": true, "subject": true}
+
+func locallySortable(spec string) bool {
+	if _, err := sortBy(spec); err != nil || spec == "" {
+		return false
+	}
+	for _, part := range strings.Split(spec, ",") {
+		field, _, _ := strings.Cut(strings.TrimSpace(part), ":")
+		if field != "" && !localSortKeys[field] {
+			return false
+		}
+	}
+	return true
+}
+
+// sortWPs sorts flattened work packages by a locallySortable spec; empty
+// values go last, as OpenProject puts them.
+func sortWPs(items []map[string]any, spec string) {
+	type key struct {
+		field string
+		desc  bool
+	}
+	var keys []key
+	for _, part := range strings.Split(spec, ",") {
+		field, dir, _ := strings.Cut(strings.TrimSpace(part), ":")
+		if field != "" {
+			keys = append(keys, key{field, strings.EqualFold(dir, "desc")})
+		}
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		for _, k := range keys {
+			a, b := items[i][k.field], items[j][k.field]
+			if (a == nil) != (b == nil) {
+				return b == nil
+			}
+			var c int
+			if k.field == "id" {
+				c = intOf(a) - intOf(b)
+			} else {
+				c = strings.Compare(hal.String(a), hal.String(b))
+			}
+			if c != 0 {
+				return (c < 0) != k.desc
+			}
+		}
+		return false
+	})
+}
+
+// dateFilter adds field <>d [after, before] (inclusive; either may be empty).
+func dateFilter(f Filters, field, after, before string) (Filters, error) {
+	from, err := ParseDate(after)
+	if err != nil {
+		return nil, err
+	}
+	to, err := ParseDate(before)
+	if err != nil {
+		return nil, err
+	}
+	if from == "" && to == "" {
+		return f, nil
+	}
+	return f.Add(field, "<>d", from, to), nil
+}
+
+// later returns the later of two date expressions (resolved, YYYY-MM-DD);
+// an invalid one is returned as is, for dateFilter to report.
+func later(a, b string) string {
+	da, err := ParseDate(a)
+	if err != nil {
+		return a
+	}
+	db, err := ParseDate(b)
+	if err != nil {
+		return b
+	}
+	if da > db {
+		return da
+	}
+	return db
 }
 
 func max1(n int) int {
@@ -259,6 +430,7 @@ func (e *Env) decorateWP(ctx context.Context, it map[string]any) {
 		it["url"] = e.C.WebURL(fmt.Sprintf("/work_packages/%d", id))
 	}
 	delete(it, "_type")
+	e.decorateStatus(ctx, it)
 	e.customFieldLabels(ctx, []map[string]any{it})
 }
 

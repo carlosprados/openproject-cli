@@ -52,6 +52,7 @@ func (s *state) env() (*ops.Env, error) {
 	env := ops.NewEnv(c, cfg.Project)
 	env.DefaultType = cfg.DefaultType
 	env.Language = cfg.Language
+	env.Warn = os.Stderr
 	return env, nil
 }
 

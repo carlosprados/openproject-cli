@@ -396,10 +396,13 @@ func (e *Env) schemaNames(ctx context.Context, projectID, typeID int) map[string
 	e.cache.mu.Unlock()
 	names := map[string]string{}
 	if projectID > 0 && typeID > 0 {
-		if res, err := e.C.Get(ctx, "/work_packages/schemas/"+url.PathEscape(key), nil); err == nil {
+		res, err := e.C.Get(ctx, "/work_packages/schemas/"+url.PathEscape(key), nil)
+		if err == nil {
 			for k, d := range parseSchema(res) {
 				names[k] = d.Name
 			}
+		} else if ctx.Err() == nil {
+			e.warnf("schema of project %d, type %d unavailable (%v): its custom fields keep their customFieldN keys", projectID, typeID, err)
 		}
 	}
 	e.cache.mu.Lock()
