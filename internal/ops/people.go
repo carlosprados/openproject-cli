@@ -107,7 +107,7 @@ var notifList = &Op{
 		pProject("Only notifications of this project"),
 		pMax(50), pPage,
 	},
-	Columns: []Column{{Header: "ID", Key: "id"}, {Header: "DATE", Key: "createdAt"}, {Header: "REASON", Key: "reason"}, {Header: "ACTOR", Key: "actor"}, {Header: "PROJECT", Key: "project"}, {Header: "RESOURCE", Key: "resource"}, {Header: "READ", Key: "readIAN"}},
+	Columns: []Column{{Header: "ID", Key: "id"}, {Header: "DATE", Key: "createdAt", Fmt: timeFmt}, {Header: "REASON", Key: "reason"}, {Header: "ACTOR", Key: "actor"}, {Header: "PROJECT", Key: "project"}, {Header: "RESOURCE", Key: "resource"}, {Header: "READ", Key: "readIAN"}},
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
 		f := NewFilters()
 		if !a.Bool("all") {

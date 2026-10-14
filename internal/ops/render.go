@@ -135,6 +135,8 @@ func renderRecord(w io.Writer, m map[string]any) error {
 		s := hal.String(v)
 		if strings.HasSuffix(k, "Time") && strings.HasPrefix(s, "P") {
 			s = hal.HoursString(v)
+		} else if isTimestamp(s) {
+			s = timeFmt(s)
 		}
 		fmt.Fprintf(tw, "%s:\t%s\n", k, s)
 	}
@@ -226,6 +228,15 @@ var (
 		return t.Local().Format("2006-01-02 15:04")
 	}
 )
+
+// isTimestamp reports whether s is an API date-time (not a bare date).
+func isTimestamp(s string) bool {
+	if len(s) < 20 || s[10] != 'T' {
+		return false
+	}
+	_, err := time.Parse(time.RFC3339, s)
+	return err == nil
+}
 
 // renderAllowed prints the field → allowed values map of `wp allowed`.
 func renderAllowed(w io.Writer, v any) error {

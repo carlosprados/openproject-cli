@@ -32,7 +32,7 @@ opcli config show -o json     # effective configuration (key masked)
 
 Pass **`-o json`** whenever you will read the output. Text output is for humans
 and may change. Every command honours `-o json`, writes included. Timestamps
-are UTC in JSON; meeting and reminder text output shows them in local time.
+are UTC in JSON; text output shows them in local time, to the minute.
 
 | Command | JSON |
 |---|---|
@@ -42,7 +42,7 @@ are UTC in JSON; meeting and reminder text output shows them in local time.
 | `wp allowed` | `{<field>: [{id, name}, …]}`, e.g. `jq -r '.status[].name'` |
 | `wp fields` | list of `{key, name, type, required, custom, values?, valuesFrom?, help?}` |
 | `wp create`, `wp update`, `wp comment`, `wp comment-edit` | the record written (+ `uploaded[]`, `mentioned[]`, `unresolvedMentions[]`) |
-| `wp update` with several ids | a list of the updated work packages |
+| `wp update` with several ids | `{total, count, items}`: the updated work packages |
 | any write with `--dry-run` | `{dryRun: true, requests: [{method, path, query?, body?, file?}], mentioned?, unresolvedMentions?}` |
 | `time log`, `time update`, `time start`, `time stop`, `wp relation add`, `membership add`, `meeting create`, `meeting agenda add`, `meeting outcome add` | the record created/updated, with its `id` |
 | `wp remind` | the reminder (`id`, `remindAt` in UTC, `note`, `remindable`), `replaced: true` if it moved an existing one |
