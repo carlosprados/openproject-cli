@@ -1084,7 +1084,7 @@ var wpActivities = &Op{
 		{Name: "comments_only", Kind: Bool, Desc: "Only entries with a comment"},
 	},
 	Columns: []Column{
-		{Header: "ID", Key: "id"}, {Header: "DATE", Key: "createdAt"}, {Header: "USER", Key: "user"},
+		{Header: "ID", Key: "id"}, {Header: "DATE", Key: "createdAt", Fmt: timeFmt}, {Header: "USER", Key: "user"},
 		{Header: "COMMENT", Key: "comment"}, {Header: "CHANGES", Key: "details"},
 	},
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {

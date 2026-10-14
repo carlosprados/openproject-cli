@@ -179,7 +179,7 @@ var attList = &Op{
 	Short:   "List attachments of a work package",
 	Example: `  opcli wp attachment list 42`,
 	Params:  []Param{pID("Work package")},
-	Columns: []Column{{Header: "ID", Key: "id"}, {Header: "FILE", Key: "fileName"}, {Header: "SIZE", Key: "fileSize"}, {Header: "TYPE", Key: "contentType"}, {Header: "AUTHOR", Key: "author"}, {Header: "CREATED", Key: "createdAt"}},
+	Columns: []Column{{Header: "ID", Key: "id"}, {Header: "FILE", Key: "fileName"}, {Header: "SIZE", Key: "fileSize"}, {Header: "TYPE", Key: "contentType"}, {Header: "AUTHOR", Key: "author"}, {Header: "CREATED", Key: "createdAt", Fmt: timeFmt}},
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
 		id, err := WorkPackageID(a.String("id"))
 		if err != nil {
