@@ -63,6 +63,7 @@ Generated with `opcli docs`. Global flags: `--config`, `--url`, `--api-key`, `-o
 | `opcli wp create` | writes | Create a work package |
 | `opcli wp delete` | **destructive** | Delete a work package (irreversible, children included) |
 | `opcli wp fields` | read-only | List the fields a work package takes: names, types, required, allowed values |
+| `opcli wp flow` | read-only | Throughput and cycle time: work packages closed in a period, with their status history |
 | `opcli wp get` | read-only | Show a work package with description, relations, children and attachments |
 | `opcli wp list` | read-only | List and search work packages with filters |
 | `opcli wp relation add` | writes | Relate two work packages |
@@ -1223,6 +1224,51 @@ Effect: read-only
   opcli wp fields -p demo-project -o json | jq -r '.items[] | select(.required) | .name'
 ```
 
+## opcli wp flow
+
+Throughput and cycle time: work packages closed in a period, with their status history
+
+Measure the work packages that were closed in the period (default the last
+30 days): when each one entered and left every status, from its activity
+history.
+
+  throughput   how many were closed, in total and per week (weeks start on
+               Monday, in your OpenProject time zone)
+  cycle time   days from the first entry into a start status to the close:
+               p50, p85 (85% took that long or less) and max
+  lead time    days from creation to the close
+  per status   where the cycle time went: days summed over the work packages,
+               share of the total and p50/p85 per work package
+
+A work package counts when its current status is closed (isClosed) and it
+entered the final run of closed statuses within the period; closed means the
+status' own flag, so "Rejected" counts if it is a closed status. The start
+statuses default to the "doing" ones (neither the default status nor closed);
+--start-status picks others. Work packages closed without passing through a
+start status count in the throughput only. Days are calendar days.
+
+It reads one activity history per closed work package, so long periods on
+busy projects take a while.
+
+Effect: read-only
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--project` | string |  | Project id, identifier or name; 'all' for every project (default: configured project) |
+| `--since` | string | `30d` | Start of the period: 30d, 12w, YYYY-MM-DD, week, month |
+| `--until` | string |  | End of the period, inclusive (YYYY-MM-DD, today, -7d; default today) |
+| `--type` | string |  | Comma-separated type names/ids |
+| `--assignee` | string |  | me, none, or login/email/name/id |
+| `--start-status` | string |  | Comma-separated statuses where the cycle starts (default: every status neither default nor closed) |
+| `--list` | bool |  | Also list the closed work packages in text output (JSON always has them) |
+
+```sh
+  opcli wp flow -p demo-project
+  opcli wp flow -p demo-project --since 12w --type Task
+  opcli wp flow --project all --since 2026-01-01 --until 2026-03-31 -o json
+  opcli wp flow -p demo-project --start-status "In progress" --list
+```
+
 ## opcli wp get
 
 Show a work package with description, relations, children and attachments
@@ -1261,9 +1307,25 @@ subject, description and comments.
 by name, "NAME=" finds empty ones). It needs a project. Custom fields come
 back by name under "customFields".
 
+Date flags take YYYY-MM-DD, today, yesterday, week, month or -7d, and both
+ends are inclusive: --updated-after/--updated-before, --created-after/
+--created-before, --due-after/--due-before. --closed-after/--closed-before
+keep the work packages whose last close (entry into a closed status) falls in
+the range: they imply --status closed, read each candidate's history (one
+request per work package updated since --closed-after) and add closedAt.
+
+Each item carries statusIsClosed and statusCategory (todo: the default
+status, done: closed statuses, doing: the rest).
+
 --filter takes raw API filters (JSON) for anything not covered by flags, e.g.
   [{"dueDate":{"operator":"<t+","values":["7"]}}]
 See 'opcli help filters' for operators. --query-id runs a saved query instead.
+
+--max 0 reads everything, 1000 per page and several pages at once, paging in
+creation order so that updates made meanwhile lose nothing (--sort is then applied
+locally for id, updatedAt, createdAt, startDate, dueDate and subject). A page the
+server fails to render (HTTP 5xx, e.g. a type whose form configuration is
+broken) is re-read by id and the loss, if any, reported on stderr.
 
 Effect: read-only
 
@@ -1280,6 +1342,14 @@ Effect: read-only
 | `--parent` | string |  | Only direct children of this work package id |
 | `--search` | string |  | Full-text search in subject, description and comments |
 | `--field` | list |  | Filter by any field by name, NAME=VALUE (repeatable): "Customer=ACME", "Area=Backend,Ops"; "NAME=" means empty; needs a project |
+| `--updated-after` | string |  | Updated on or after this date (YYYY-MM-DD, today, week, month, -7d) |
+| `--updated-before` | string |  | Updated on or before this date |
+| `--created-after` | string |  | Created on or after this date |
+| `--created-before` | string |  | Created on or before this date |
+| `--due-after` | string |  | Due (finish date) on or after this date |
+| `--due-before` | string |  | Due (finish date) on or before this date |
+| `--closed-after` | string |  | Last closed on or after this date (implies --status closed; reads each candidate's history) |
+| `--closed-before` | string |  | Last closed on or before this date (implies --status closed) |
 | `--filter` | string |  | Extra raw API filters as a JSON array (see 'opcli help filters') |
 | `--sort` | string | `updatedAt:desc` | Sort spec field:asc\|desc, comma-separated (id, subject, updatedAt, dueDate, priority, status...) |
 | `--query-id` | int |  | Run a saved query by id (other filters are ignored) |
@@ -1293,6 +1363,9 @@ Effect: read-only
   opcli wp list --search "login timeout" --max 10
   opcli wp list --status "In progress,On hold" --sort dueDate:asc
   opcli wp list -p demo-project --field "Customer=ACME" --field "Billable=yes"
+  opcli wp list --updated-after -7d --status all
+  opcli wp list --due-before today               # overdue (open)
+  opcli wp list -p all --closed-after 2026-09-01 -o json
   opcli wp list --filter '[{"dueDate":{"operator":"<t+","values":["7"]}}]'
   opcli wp list --query-id 12                    # run a saved query
   opcli wp list --assignee me -o json            # machine-readable

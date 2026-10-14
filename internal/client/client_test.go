@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestAuthErrorsAndRetry(t *testing.T) {
@@ -76,6 +79,76 @@ func TestCollectPaging(t *testing.T) {
 		if want > 0 && items[len(items)-1]["id"] != float64(want) {
 			t.Errorf("Collect(max=%d): last id %v", max, items[len(items)-1]["id"])
 		}
+	}
+}
+
+// A server whose page ceiling is below MaxPageSize answers with its own
+// pageSize: Collect must page by it, in order, a bounded number at a time.
+func TestCollectFollowsServerPageSizeInParallel(t *testing.T) {
+	const total, ceiling = 1050, 100
+	var inFlight, peak atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := inFlight.Add(1)
+		defer inFlight.Add(-1)
+		for p := peak.Load(); n > p && !peak.CompareAndSwap(p, n); p = peak.Load() {
+		}
+		time.Sleep(5 * time.Millisecond)
+		size, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
+		size = min(size, ceiling)
+		page, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+		start := (page - 1) * size
+		fmt.Fprintf(w, `{"total":%d,"pageSize":%d,"_embedded":{"elements":[`, total, size)
+		for i := start; i < min(start+size, total); i++ {
+			if i > start {
+				fmt.Fprint(w, ",")
+			}
+			fmt.Fprintf(w, `{"id":%d}`, i+1)
+		}
+		fmt.Fprint(w, `]}}`)
+	}))
+	defer srv.Close()
+
+	items, tot, err := New(srv.URL, "k").Collect(context.Background(), "/things", nil, 0)
+	if err != nil || tot != total || len(items) != total {
+		t.Fatalf("got %d items, total %d, %v", len(items), tot, err)
+	}
+	for i, it := range items {
+		if it["id"] != float64(i+1) {
+			t.Fatalf("item %d has id %v: pages out of order", i, it["id"])
+		}
+	}
+	if p := peak.Load(); p > CollectParallel || p < 2 {
+		t.Errorf("peak concurrency %d, want 2..%d", p, CollectParallel)
+	}
+}
+
+func TestCollectFallbackRecoversFailedPage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+		if page == 2 {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, `{"_type":"Error","message":"undefined method 'filters' for nil"}`)
+			return
+		}
+		fmt.Fprintf(w, `{"total":3,"pageSize":1,"_embedded":{"elements":[{"id":%d}]}}`, page)
+	}))
+	defer srv.Close()
+	c := New(srv.URL, "k")
+
+	if _, _, err := c.Collect(context.Background(), "/things", nil, 3); err == nil {
+		t.Fatal("without a fallback a failed page must fail Collect")
+	}
+	var gotOffset string
+	fb := func(_ context.Context, q url.Values, err error) ([]map[string]any, int, error) {
+		if e, ok := err.(*APIError); !ok || e.Status != 500 {
+			t.Errorf("fallback got %v", err)
+		}
+		gotOffset = q.Get("offset")
+		return []map[string]any{{"id": float64(2), "recovered": true}}, 3, nil
+	}
+	items, _, err := c.CollectWith(context.Background(), "/things", nil, 3, fb)
+	if err != nil || len(items) != 3 || items[1]["recovered"] != true || gotOffset != "2" {
+		t.Fatalf("items %v, offset %q, %v", items, gotOffset, err)
 	}
 }
 

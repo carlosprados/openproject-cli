@@ -25,6 +25,11 @@ type resolverCache struct {
 	me       int
 	schemas  map[string]map[string]string // "project-type" → customFieldN → name
 	loc      *time.Location
+	statuses map[int]statusInfo
+	// statusLabel is the localised name of the status field, as activity
+	// details print it ("Status", "Estado").
+	statusLabel string
+	warnMu      sync.Mutex
 }
 
 type named struct {

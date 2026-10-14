@@ -143,12 +143,26 @@ type Env struct {
 	// DryRun: the client records writes instead of sending them (see
 	// client.Recorder); ops that plan their own work (backfill) check it.
 	DryRun bool
-	cache  resolverCache
+	// Warn receives degradations that do not fail the command (a page or a
+	// schema the server could not render): stderr in the CLI, so -o json on
+	// stdout stays clean. Nil discards them.
+	Warn  io.Writer
+	cache resolverCache
 }
 
 // NewEnv builds an Env.
 func NewEnv(c *client.Client, defaultProject string) *Env {
 	return &Env{C: c, DefaultProject: defaultProject}
+}
+
+// warnf reports a degradation on e.Warn, prefixed "opcli: warning:".
+func (e *Env) warnf(format string, args ...any) {
+	if e.Warn == nil {
+		return
+	}
+	e.cache.warnMu.Lock()
+	defer e.cache.warnMu.Unlock()
+	fmt.Fprintf(e.Warn, "opcli: warning: "+format+"\n", args...)
 }
 
 // Args holds parameter values by snake_case name. Only params explicitly

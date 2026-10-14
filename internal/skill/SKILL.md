@@ -48,6 +48,7 @@ are UTC in JSON; meeting and reminder text output shows them in local time.
 | `wp remind` | the reminder (`id`, `remindAt` in UTC, `note`, `remindable`), `replaced: true` if it moved an existing one |
 | `time status` | `{running: false}` or the running entry + `running: true`, `elapsed` |
 | `wp delete`, `time delete`, `notification read`, … | `{ok: true, message}` |
+| `wp flow` | `{project, from, to, startStatuses, throughput, weekly, cycleTime, leadTime, statuses, workPackages}` (see Flow) |
 | `wp backfill` | plan or result: `workPackage`, `startDate`, `dueDate`, `totalHours`, `days[]` (`date`, `hours`, `timeEntryId`), `comment` |
 
 Records are flattened from HAL: a link becomes its title plus an id
@@ -55,7 +56,10 @@ Records are flattened from HAL: a link becomes its title plus an id
 durations stay ISO 8601 (`"estimatedTime": "PT2H"`); work packages carry
 `url`, the browser link, and their custom fields by name under
 `customFields` (`{"Customer": "ACME", "Tags": ["urgent"]}`; empty ones are
-omitted). `wp list` items are compact (no description). Chain steps with `jq`:
+omitted), plus `statusIsClosed` (the status' own flag: the reliable way to
+tell open from closed) and `statusCategory` (`todo` = the default status,
+`done` = closed, `doing` = any other; a heuristic, OpenProject has no
+categories). `wp list` items are compact (no description). Chain steps with `jq`:
 
 ```sh
 ID=$(opcli wp create --subject "Spike: cache" -o json | jq -r .id)
@@ -114,6 +118,11 @@ opcli wp list --version "v1.2" --project demo-project -o json
 opcli wp list --parent 42 -o json                          # direct children
 opcli wp list --project demo-project --field "Customer=ACME" --field "Billable=yes" -o json
 opcli wp list --project demo-project --field "Area=Backend,Ops" --field "Due to customer=" -o json   # "NAME=" = empty
+opcli wp list --updated-after -7d --status all -o json    # also --updated-before
+opcli wp list --created-after month --created-before today -o json
+opcli wp list --due-before today -o json                  # overdue (open); also --due-after
+opcli wp list -p all --closed-after 2026-09-01 --closed-before 2026-09-30 -o json   # + closedAt
+opcli wp list -p all --status all --max 0 -o json         # everything
 opcli wp list --filter '[{"dueDate":{"operator":"<t+","values":["7"]}}]' -o json
 opcli wp list --query-id 12 -o json                        # a saved query (see query list)
 opcli wp list --max 50 --page 2 -o json
@@ -140,9 +149,51 @@ opcli time status -o json                                  # is a timer running?
   booleans `yes`/`no`, dates as usual. It needs a project. OpenProject cannot
   filter by user or version custom fields: filter by something else and check
   `customFields` with `jq`.
-- `--filter` takes raw API filters for anything without a flag (dates,
-  watchers…): `opcli help filters` lists operators and names.
+- Date flags take the usual dates (`2026-09-01`, `today`, `week`, `month`,
+  `-7d`) and both ends are inclusive. `--due-*` also matches a milestone's
+  date.
+- OpenProject has no close date: `--closed-after/--closed-before` imply
+  `--status closed` (unless you give statuses), read the history of every
+  candidate (one request each: those updated since `--closed-after`) and keep
+  the ones whose last close (entry into a closed status) is in range, adding
+  `closedAt` (UTC). Not with `--page`.
+- `--max 0` reads 1000 per page, several pages at once; tens of thousands of
+  work packages take minutes. It pages in creation order (updates made
+  meanwhile would otherwise make work packages jump pages and get lost) and then applies
+  `--sort` locally for id, updatedAt, createdAt, startDate, dueDate and
+  subject; if fewer than `total` come back it warns on stderr. If the server fails to render a page (HTTP 5xx,
+  typically a type whose form configuration is broken), opcli re-reads it by
+  id and warns on stderr (`opcli: warning: …`) with what it skipped; a
+  type whose schema fails keeps its custom fields as `customFieldN`, also
+  warned. stdout stays valid JSON: check stderr before trusting a total.
+- `--filter` takes raw API filters for anything without a flag (watchers,
+  relative dates…): `opcli help filters` lists operators and names.
 - Work packages are `#42` in OpenProject's UI; pass `42` (or `#42`).
+
+### Flow: throughput and cycle time
+
+```sh
+opcli wp flow -p demo-project -o json                    # closed in the last 30 days
+opcli wp flow -p all --since 12w --type Task -o json
+opcli wp flow -p demo-project --since 2026-07-01 --until 2026-09-30 -o json
+opcli wp flow -p demo-project --start-status "In progress" --assignee me --list
+```
+
+`wp flow` measures the work packages closed in the period (`--since`, default
+`30d`; also `12w` or a date; `--until`, default today): those whose current
+status is closed and that entered it (the final run of closed statuses)
+within the period. JSON: `throughput`; `weekly: [{week (Monday), count,
+partial?}]`; `cycleTime` and `leadTime`: `{count, p50, p85, max}` in calendar
+days (cycle: first entry into a start status → close; lead: creation →
+close); `statuses: [{name, days, share (%), perWP: {count, p50, p85, max}}]`,
+where the cycle time went; `workPackages: [{id, subject, type, project,
+status, assignee, created, started?, closed, cycleDays?, leadDays, url,
+history: [{status, entered, left?, days?}]}]`, every status the work package
+went through with entry and exit (UTC; the last one has no `left`). Start
+statuses default to the `doing` ones; `--start-status` picks others. Closed
+without a start status: throughput only. Statuses are read from each work
+package's activities whatever the user's language. `--list` lists the work
+packages in text output.
 
 ## Markdown, images and files
 
@@ -389,8 +440,8 @@ confirmed.
   estimate, dates), propose the next status from the allowed values and an
   assignee, and summarise the discussion. Then `wp update` / `wp comment`.
 - **Project status report**: `project get`, open WPs sorted by `dueDate`, and
-  WPs updated recently with `--status all --filter
-  '[{"updatedAt":{"operator":">t-","values":["7"]}}]'`. Report health, done
+  WPs updated recently with `--status all --updated-after -7d`; `wp flow
+  --since 4w` for throughput and cycle time. Report health, done
   and in progress, overdue and due soon with assignees, risks, next steps.
 - **Log my time from free text** ("2h review of the login bug, 1h standup"):
   match each chunk to a WP (my open work first, then `wp list --search`), pick
@@ -450,7 +501,10 @@ allow it: check `api endpoints` and ask before writing.
 ## Errors
 
 Errors go to stderr as one line (`Error: …`) and exit 1. Only a wrong flag or
-argument also prints the command usage.
+argument also prints the command usage. Lines starting `opcli: warning:` are
+not errors: the command finished but lost or degraded something (a page
+re-read by id, a skipped work package, custom fields without names). Pass
+them on to the user.
 
 - `openproject: HTTP 422: the server would reject this, nothing was written
   (… Allowed: a, b.)`: the form check of a create/update failed; nothing

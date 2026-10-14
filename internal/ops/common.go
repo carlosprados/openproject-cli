@@ -41,6 +41,11 @@ func pID(what string) Param {
 
 // list fetches a collection honouring the max/page params and flattens it.
 func (e *Env) list(ctx context.Context, path string, q url.Values, a Args, keepEmbedded ...string) (*List, error) {
+	return e.listWith(ctx, path, q, a, nil, keepEmbedded...)
+}
+
+// listWith is list with a fallback for pages the server fails to render.
+func (e *Env) listWith(ctx context.Context, path string, q url.Values, a Args, fallback client.PageFallback, keepEmbedded ...string) (*List, error) {
 	if q == nil {
 		q = url.Values{}
 	}
@@ -54,11 +59,18 @@ func (e *Env) list(ctx context.Context, path string, q url.Values, a Args, keepE
 		q.Set("offset", strconv.Itoa(page))
 		res, err := e.C.Get(ctx, path, q)
 		if err != nil {
-			return nil, err
+			if fallback == nil {
+				return nil, err
+			}
+			items, total, ferr := fallback(ctx, q, err)
+			if ferr != nil {
+				return nil, ferr
+			}
+			return NewList(hal.FlattenAll(items, keepEmbedded...), total), nil
 		}
 		return NewList(hal.FlattenAll(client.Elements(res), keepEmbedded...), intOf(res["total"])), nil
 	}
-	items, total, err := e.C.Collect(ctx, path, q, max)
+	items, total, err := e.C.CollectWith(ctx, path, q, max, fallback)
 	if err != nil {
 		return nil, err
 	}
