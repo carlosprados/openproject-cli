@@ -350,6 +350,9 @@ Effect: writes
 
 Add a user or group to a project with one or more roles
 
+Add a user or group to a project. OpenProject emails the new members
+(every user of a group); --notify=false sends nothing, for bulk changes.
+
 Effect: writes
 
 | Flag | Type | Default | Description |
@@ -358,10 +361,12 @@ Effect: writes
 | `--user` | string |  | **required** User/group: login, email, name or id |
 | `--roles` | list |  | **required** Role names or ids (see 'opcli role list') |
 | `--message` | string |  | Custom text for the notification email |
+| `--notify` | bool | `true` | Email the member(s) about it (--notify=false: no email) |
 
 ```sh
   opcli membership add -p demo-project --user jane.doe --roles Member
   opcli membership add -p demo-project --user devs --roles "Member,Reader" --message "Welcome!"
+  opcli membership add -p demo-project --user devs --roles Member --notify=false   # no emails
 ```
 
 ## opcli membership delete
@@ -405,9 +410,12 @@ Effect: writes
 |---|---|---|---|
 | `<id>` (arg) | string |  | **required** Membership id |
 | `--roles` | list |  | **required** Role names or ids |
+| `--message` | string |  | Custom text for the notification email |
+| `--notify` | bool | `true` | Email the member(s) about it (--notify=false: no email) |
 
 ```sh
   opcli membership update 12 --roles "Project admin"
+  opcli membership update 12 --roles Reader --notify=false   # no email
 ```
 
 ## opcli notification list
