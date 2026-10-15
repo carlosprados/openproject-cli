@@ -339,3 +339,17 @@ func TestPrincipalHref(t *testing.T) {
 		t.Error("expected error for unknown principal")
 	}
 }
+
+func TestMemberMetaNotify(t *testing.T) {
+	m, err := memberMeta(Args{"notify": false})
+	if err != nil || m["sendNotifications"] != false || m["notificationMessage"] != nil {
+		t.Errorf("--notify=false: %v %v", m, err)
+	}
+	m, err = memberMeta(Args{"notify": true, "message": "Welcome"})
+	if err != nil || m["sendNotifications"] != true || m["notificationMessage"] == nil {
+		t.Errorf("--message: %v %v", m, err)
+	}
+	if _, err := memberMeta(Args{"notify": false, "message": "Welcome"}); err == nil {
+		t.Error("--message with --notify=false must fail")
+	}
+}

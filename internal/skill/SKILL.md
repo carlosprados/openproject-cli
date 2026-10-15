@@ -408,8 +408,13 @@ opcli version create --project website --name "v1.2" --start-date today --end-da
 opcli version update 8 --status closed --description "Released"
 opcli membership list --project website --user jane -o json
 opcli membership add --project website --user jane --roles "Member,Reader" --message "Welcome"
-opcli membership update 31 --roles Reader
+opcli membership add --project website --user devs --roles Member --notify=false   # no emails
+opcli membership update 31 --roles Reader --notify=false
 ```
+
+`membership add` and `membership update` email the member (every user of a
+group) by default; pass `--notify=false` for bulk changes. `--message` adds a
+custom text to that email and cannot go with `--notify=false`.
 
 ## Anything else: the raw API
 

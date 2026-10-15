@@ -405,13 +405,16 @@ var memCreate = &Op{
 	Cmd:     []string{"membership", "add"},
 	Aliases: []string{"create"},
 	Short:   "Add a user or group to a project with one or more roles",
+	Long: `Add a user or group to a project. OpenProject emails the new members
+(every user of a group); --notify=false sends nothing, for bulk changes.`,
 	Example: `  opcli membership add -p demo-project --user jane.doe --roles Member
-  opcli membership add -p demo-project --user devs --roles "Member,Reader" --message "Welcome!"`,
+  opcli membership add -p demo-project --user devs --roles "Member,Reader" --message "Welcome!"
+  opcli membership add -p demo-project --user devs --roles Member --notify=false   # no emails`,
 	Params: []Param{
 		pProject(""),
 		{Name: "user", Kind: String, Required: true, Desc: "User/group: login, email, name or id"},
 		{Name: "roles", Kind: Strings, Required: true, Desc: "Role names or ids (see 'opcli role list')"},
-		{Name: "message", Kind: String, Desc: "Custom text for the notification email"},
+		pMemberMessage, pMemberNotify,
 	},
 	Safety: Write,
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
@@ -431,12 +434,13 @@ var memCreate = &Op{
 		if err != nil {
 			return nil, err
 		}
+		meta, err := memberMeta(a)
+		if err != nil {
+			return nil, err
+		}
 		body := map[string]any{"_links": map[string]any{
 			"project": hal.Ref(href("projects", pid)), "principal": hal.Ref(principal), "roles": roles,
-		}}
-		if m := a.String("message"); m != "" {
-			body["_meta"] = map[string]any{"notificationMessage": hal.Text(m), "sendNotifications": true}
-		}
+		}, "_meta": meta}
 		res, err := e.C.Post(ctx, "/memberships", body)
 		if err != nil {
 			return nil, err
@@ -448,10 +452,12 @@ var memCreate = &Op{
 var memUpdate = &Op{
 	Cmd:     []string{"membership", "update"},
 	Short:   "Replace the roles of a membership",
-	Example: `  opcli membership update 12 --roles "Project admin"`,
+	Example: `  opcli membership update 12 --roles "Project admin"
+  opcli membership update 12 --roles Reader --notify=false   # no email`,
 	Params: []Param{
 		pID("Membership"),
 		{Name: "roles", Kind: Strings, Required: true, Desc: "Role names or ids"},
+		pMemberMessage, pMemberNotify,
 	},
 	Safety: Write,
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
@@ -459,12 +465,34 @@ var memUpdate = &Op{
 		if err != nil {
 			return nil, err
 		}
-		res, err := e.C.Patch(ctx, "/memberships/"+url.PathEscape(a.String("id")), map[string]any{"_links": map[string]any{"roles": roles}})
+		meta, err := memberMeta(a)
+		if err != nil {
+			return nil, err
+		}
+		res, err := e.C.Patch(ctx, "/memberships/"+url.PathEscape(a.String("id")), map[string]any{"_links": map[string]any{"roles": roles}, "_meta": meta})
 		if err != nil {
 			return nil, err
 		}
 		return hal.Flatten(res), nil
 	},
+}
+
+var (
+	pMemberMessage = Param{Name: "message", Kind: String, Desc: "Custom text for the notification email"}
+	pMemberNotify  = Param{Name: "notify", Kind: Bool, Default: true, Desc: "Email the member(s) about it (--notify=false: no email)"}
+)
+
+// memberMeta builds the _meta block of a membership write.
+func memberMeta(a Args) (map[string]any, error) {
+	notify := a.Bool("notify")
+	meta := map[string]any{"sendNotifications": notify}
+	if m := a.String("message"); m != "" {
+		if !notify {
+			return nil, fmt.Errorf("--message needs notifications: drop --notify=false or --message")
+		}
+		meta["notificationMessage"] = hal.Text(m)
+	}
+	return meta, nil
 }
 
 // principalHref returns the typed href (users, groups or placeholder_users)
