@@ -474,7 +474,7 @@ func (e *Env) agendaPayload(ctx context.Context, a Args) (map[string]any, error)
 		body["title"] = a.String("title")
 	}
 	if a.Has("wp") {
-		wp, err := WorkPackageID(a.String("wp"))
+		wp, err := e.WorkPackage(ctx, a.String("wp"))
 		if err != nil {
 			return nil, err
 		}
@@ -550,7 +550,7 @@ information, --wp to link a follow-up work package (create it first with
 			body["notes"] = hal.Text(a.String("notes"))
 		}
 		if a.Has("wp") {
-			wp, err := WorkPackageID(a.String("wp"))
+			wp, err := e.WorkPackage(ctx, a.String("wp"))
 			if err != nil {
 				return nil, err
 			}

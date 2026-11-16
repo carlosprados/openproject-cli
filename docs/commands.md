@@ -1293,6 +1293,7 @@ Effect: read-only
 
 ```sh
   opcli wp get 42
+  opcli wp get PROJ-42                    # the project-based id the web UI shows
   opcli wp get 42 --activities
   opcli wp get 42 -o json
 ```

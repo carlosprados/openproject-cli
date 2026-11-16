@@ -524,7 +524,7 @@ work package of --type in --project.`,
 		var path string
 		body := map[string]any{"_links": map[string]any{}}
 		if a.Has("id") && a.String("id") != "" {
-			id, err := WorkPackageID(a.String("id"))
+			id, err := e.WorkPackage(ctx, a.String("id"))
 			if err != nil {
 				return nil, err
 			}

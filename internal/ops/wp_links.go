@@ -31,7 +31,7 @@ var relList = &Op{
 	Params:  []Param{pID("Work package")},
 	Columns: []Column{{Header: "ID", Key: "id"}, {Header: "TYPE", Key: "type"}, {Header: "WP", Key: "workPackageId"}, {Header: "SUBJECT", Key: "subject"}},
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
-		id, err := WorkPackageID(a.String("id"))
+		id, err := e.WorkPackage(ctx, a.String("id"))
 		if err != nil {
 			return nil, err
 		}
@@ -63,11 +63,11 @@ starts after #10 finishes; "12 blocks 10" means #10 cannot be closed before
 	},
 	Safety: Write,
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
-		from, err := WorkPackageID(a.String("id"))
+		from, err := e.WorkPackage(ctx, a.String("id"))
 		if err != nil {
 			return nil, err
 		}
-		to, err := WorkPackageID(a.String("to"))
+		to, err := e.WorkPackage(ctx, a.String("to"))
 		if err != nil {
 			return nil, err
 		}
@@ -113,7 +113,7 @@ var watchList = &Op{
 	Params:  []Param{pID("Work package")},
 	Columns: []Column{{Header: "ID", Key: "id"}, {Header: "NAME", Key: "name"}, {Header: "LOGIN", Key: "login"}, {Header: "EMAIL", Key: "email"}},
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
-		id, err := WorkPackageID(a.String("id"))
+		id, err := e.WorkPackage(ctx, a.String("id"))
 		if err != nil {
 			return nil, err
 		}
@@ -132,7 +132,7 @@ var watchAdd = &Op{
 	},
 	Safety: Write,
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
-		id, err := WorkPackageID(a.String("id"))
+		id, err := e.WorkPackage(ctx, a.String("id"))
 		if err != nil {
 			return nil, err
 		}
@@ -158,7 +158,7 @@ var watchRemove = &Op{
 	},
 	Safety: Write,
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
-		id, err := WorkPackageID(a.String("id"))
+		id, err := e.WorkPackage(ctx, a.String("id"))
 		if err != nil {
 			return nil, err
 		}
@@ -181,7 +181,7 @@ var attList = &Op{
 	Params:  []Param{pID("Work package")},
 	Columns: []Column{{Header: "ID", Key: "id"}, {Header: "FILE", Key: "fileName"}, {Header: "SIZE", Key: "fileSize"}, {Header: "TYPE", Key: "contentType"}, {Header: "AUTHOR", Key: "author"}, {Header: "CREATED", Key: "createdAt", Fmt: timeFmt}},
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
-		id, err := WorkPackageID(a.String("id"))
+		id, err := e.WorkPackage(ctx, a.String("id"))
 		if err != nil {
 			return nil, err
 		}
@@ -208,7 +208,7 @@ updating a work package, use --attach on 'wp create' / 'wp update'.`,
 	},
 	Safety: Write,
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
-		id, err := WorkPackageID(a.String("id"))
+		id, err := e.WorkPackage(ctx, a.String("id"))
 		if err != nil {
 			return nil, err
 		}

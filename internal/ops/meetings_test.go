@@ -194,7 +194,7 @@ func TestUpdateSeveralWorkPackagesReportsEachOutcome(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "1 of 2") || !strings.Contains(err.Error(), "#43:") || !strings.Contains(err.Error(), "updated: #42") {
 		t.Errorf("expected a per-id report, got %v", err)
 	}
-	if _, err := workPackageIDs("42, x"); err == nil {
+	if _, err := env.workPackages(context.Background(), "42, x"); err == nil {
 		t.Error("expected an invalid id error")
 	}
 }

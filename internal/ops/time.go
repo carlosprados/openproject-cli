@@ -83,7 +83,7 @@ var timeList = &Op{
 			f = f.Add("project_id", "=", pid)
 		}
 		if a.Has("wp") {
-			id, err := WorkPackageID(a.String("wp"))
+			id, err := e.WorkPackage(ctx, a.String("wp"))
 			if err != nil {
 				return nil, err
 			}
@@ -179,7 +179,7 @@ var timeLog = &Op{
 	},
 	Safety: Write,
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
-		wp, err := WorkPackageID(a.String("wp"))
+		wp, err := e.WorkPackage(ctx, a.String("wp"))
 		if err != nil {
 			return nil, err
 		}
@@ -221,7 +221,7 @@ var timeUpdate = &Op{
 		wp := 0
 		if a.Has("wp") {
 			var err error
-			if wp, err = WorkPackageID(a.String("wp")); err != nil {
+			if wp, err = e.WorkPackage(ctx, a.String("wp")); err != nil {
 				return nil, err
 			}
 		} else if a.Has("activity") {
@@ -317,7 +317,7 @@ var timeActivities = &Op{
 		wp := 0
 		if a.Has("wp") {
 			var err error
-			if wp, err = WorkPackageID(a.String("wp")); err != nil {
+			if wp, err = e.WorkPackage(ctx, a.String("wp")); err != nil {
 				return nil, err
 			}
 		}
@@ -348,7 +348,7 @@ web UI shows: stop the running one first.`,
 	},
 	Safety: Write,
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
-		wp, err := WorkPackageID(a.String("wp"))
+		wp, err := e.WorkPackage(ctx, a.String("wp"))
 		if err != nil {
 			return nil, err
 		}
