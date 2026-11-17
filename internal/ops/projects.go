@@ -450,8 +450,8 @@ var memCreate = &Op{
 }
 
 var memUpdate = &Op{
-	Cmd:     []string{"membership", "update"},
-	Short:   "Replace the roles of a membership",
+	Cmd:   []string{"membership", "update"},
+	Short: "Replace the roles of a membership",
 	Example: `  opcli membership update 12 --roles "Project admin"
   opcli membership update 12 --roles Reader --notify=false   # no email`,
 	Params: []Param{
