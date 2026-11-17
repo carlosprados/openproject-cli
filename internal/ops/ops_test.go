@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -233,6 +234,9 @@ func (f *fakeOP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"_type":"WorkPackage","id":50,"subject":"New"}`))
 	case r.URL.Path == "/api/v3/work_packages" && r.Method == "GET":
 		_, _ = w.Write([]byte(`{"_type":"Collection","total":1,"count":1,"_embedded":{"elements":[{"id":1,"subject":"A","description":{"format":"markdown","raw":"long"},"_links":{"status":{"href":"/api/v3/statuses/1","title":"New"}}}]}}`))
+	case r.URL.Path == "/api/v3/projects" && strings.Contains(r.URL.Query().Get("filters"), `"ancestor"`):
+		// Descendants of project 4, deliberately out of order.
+		_, _ = w.Write([]byte(`{"_type":"Collection","total":2,"count":2,"_embedded":{"elements":[{"id":9,"name":"Grandchild"},{"id":6,"name":"Child"}]}}`))
 	default:
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = w.Write([]byte(`{"_type":"Error","errorIdentifier":"urn:openproject-org:api:v3:errors:NotFound","message":"not found"}`))
@@ -268,6 +272,27 @@ func TestUpdateWorkPackageSendsLockVersionAndResolvedStatus(t *testing.T) {
 	}
 	if _, ok := patch["notify"]; ok {
 		t.Error("notify must be a query param, not a body field")
+	}
+}
+
+func TestListWorkPackagesWithSubprojects(t *testing.T) {
+	env, f := newTestEnv(t)
+	if _, err := ByCmd("wp list").Execute(context.Background(), env, Args{"project": "4", "subprojects": true}); err != nil {
+		t.Fatal(err)
+	}
+	var filters string
+	for _, r := range f.requests {
+		if strings.HasPrefix(r, "GET /api/v3/work_packages?") {
+			u, _ := url.Parse(strings.TrimPrefix(r, "GET "))
+			filters = u.Query().Get("filters")
+		}
+	}
+	if want := `"project":{"operator":"=","values":["4","6","9"]}`; !strings.Contains(filters, want) {
+		t.Errorf("filters %s lack %s (root first, then descendants by id)", filters, want)
+	}
+
+	if _, err := ByCmd("wp list").Execute(context.Background(), env, Args{"project": "all", "subprojects": true}); err == nil {
+		t.Error("--subprojects with --project all must fail")
 	}
 }
 

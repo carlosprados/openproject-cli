@@ -410,10 +410,12 @@ It reads one activity history per closed work package, so long periods on
 busy projects take a while.`,
 	Example: `  opcli wp flow -p demo-project
   opcli wp flow -p demo-project --since 12w --type Task
+  opcli wp flow -p programme --subprojects --since 4w
   opcli wp flow --project all --since 2026-01-01 --until 2026-03-31 -o json
   opcli wp flow -p demo-project --start-status "In progress" --list`,
 	Params: []Param{
 		pProject("Project id, identifier or name; 'all' for every project (default: configured project)"),
+		pSubprojects,
 		{Name: "since", Kind: String, Default: "30d", Desc: "Start of the period: 30d, 12w, YYYY-MM-DD, week, month"},
 		{Name: "until", Kind: String, Desc: "End of the period, inclusive (YYYY-MM-DD, today, -7d; default today)"},
 		{Name: "type", Kind: String, Short: "t", Desc: "Comma-separated type names/ids"},
@@ -446,8 +448,17 @@ busy projects take a while.`,
 			if err != nil {
 				return nil, err
 			}
-			f = f.Add("project", "=", pid)
+			scope, err := e.projectScope(ctx, pid, a.Bool("subprojects"))
+			if err != nil {
+				return nil, err
+			}
+			f = f.Add("project", "=", scope...)
 			projectName = firstNonEmpty(project, e.DefaultProject)
+			if a.Bool("subprojects") {
+				projectName += " (with subprojects)"
+			}
+		} else if a.Bool("subprojects") {
+			return nil, errSubprojectsNeedProject
 		}
 		if a.Has("type") {
 			ids, err := e.resolveMany(ctx, a.Strings("type"), e.TypeID)

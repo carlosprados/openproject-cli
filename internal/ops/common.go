@@ -27,6 +27,10 @@ func pProject(desc string) Param {
 	return Param{Name: "project", Kind: String, Short: "p", Desc: desc}
 }
 
+var pSubprojects = Param{Name: "subprojects", Kind: Bool, Desc: "Also include every subproject of --project, at any depth"}
+
+var errSubprojectsNeedProject = fmt.Errorf("--subprojects needs a project: pass --project (not 'all') or configure a default one")
+
 // pProjectArg is pProject taken as an optional positional argument.
 func pProjectArg() Param {
 	p := pProject("Project id, identifier or name (default: configured project)")
