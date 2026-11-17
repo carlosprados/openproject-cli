@@ -441,6 +441,7 @@ busy projects take a while.`,
 		}
 
 		f := NewFilters().Add("status", "c").Add("updatedAt", "<>d", from, "")
+		path := "/work_packages"
 		project := a.String("project")
 		projectName := "all"
 		if !strings.EqualFold(project, "all") && (project != "" || e.DefaultProject != "") {
@@ -448,11 +449,9 @@ busy projects take a while.`,
 			if err != nil {
 				return nil, err
 			}
-			scope, err := e.projectScope(ctx, pid, a.Bool("subprojects"))
-			if err != nil {
+			if f, path, err = e.workPackageScope(ctx, f, pid, a.Bool("subprojects")); err != nil {
 				return nil, err
 			}
-			f = f.Add("project", "=", scope...)
 			projectName = firstNonEmpty(project, e.DefaultProject)
 			if a.Bool("subprojects") {
 				projectName += " (with subprojects)"
@@ -495,7 +494,7 @@ busy projects take a while.`,
 		}
 
 		q := url.Values{"filters": {f.JSON()}, "sortBy": {stableSort}}
-		items, _, err := e.C.CollectWith(ctx, "/work_packages", q, 0, e.wpPageFallback("/work_packages"))
+		items, _, err := e.C.CollectWith(ctx, path, q, 0, e.wpPageFallback(path))
 		if err != nil {
 			return nil, err
 		}

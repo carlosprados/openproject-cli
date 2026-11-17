@@ -152,7 +152,9 @@ opcli time status -o json                                  # is a timer running?
   on an instance setting ("display subprojects work packages"), so do not
   rely on it. `--subprojects` always includes every project below X, at any
   depth (one extra request), whatever the setting; it needs a project, not
-  `all`. There is no reliable way to exclude subprojects: check `project`
+  `all`. "Below" follows the parent links, the tree the web UI shows: a
+  project the server keeps below X by mistake without a parent link to it is
+  left out, with a warning on stderr. There is no reliable way to exclude subprojects: check `project`
   in the items with `jq`. `--field` and `--version` names resolve in X:
   versions shared with the subprojects work.
 - `--field NAME=VALUE` filters by any field by its name, custom fields

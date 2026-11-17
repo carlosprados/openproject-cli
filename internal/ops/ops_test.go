@@ -235,11 +235,15 @@ func (f *fakeOP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	case r.URL.Path == "/api/v3/work_packages" && r.Method == "POST":
 		_, _ = w.Write([]byte(`{"_type":"WorkPackage","id":50,"subject":"New"}`))
-	case r.URL.Path == "/api/v3/work_packages" && r.Method == "GET":
+	case (r.URL.Path == "/api/v3/work_packages" || r.URL.Path == "/api/v3/projects/4/work_packages") && r.Method == "GET":
 		_, _ = w.Write([]byte(`{"_type":"Collection","total":1,"count":1,"_embedded":{"elements":[{"id":1,"subject":"A","description":{"format":"markdown","raw":"long"},"_links":{"status":{"href":"/api/v3/statuses/1","title":"New"}}}]}}`))
 	case r.URL.Path == "/api/v3/projects" && strings.Contains(r.URL.Query().Get("filters"), `"ancestor"`):
-		// Descendants of project 4, deliberately out of order.
-		_, _ = w.Write([]byte(`{"_type":"Collection","total":2,"count":2,"_embedded":{"elements":[{"id":9,"name":"Grandchild"},{"id":6,"name":"Child"}]}}`))
+		// Descendants of project 4, deliberately out of order, plus 7, which the
+		// nested set puts below 4 although it has no parent link (left out).
+		_, _ = w.Write([]byte(`{"_type":"Collection","total":3,"count":3,"_embedded":{"elements":[` +
+			`{"id":9,"name":"Grandchild","_links":{"parent":{"href":"/api/v3/projects/6","title":"Child"}}},` +
+			`{"id":7,"name":"Stray","_links":{"parent":{"href":null}}},` +
+			`{"id":6,"name":"Child","_links":{"parent":{"href":"/api/v3/projects/4","title":"Root"}}}]}}`))
 	default:
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = w.Write([]byte(`{"_type":"Error","errorIdentifier":"urn:openproject-org:api:v3:errors:NotFound","message":"not found"}`))
@@ -285,13 +289,15 @@ func TestListWorkPackagesWithSubprojects(t *testing.T) {
 	}
 	var filters string
 	for _, r := range f.requests {
-		if strings.HasPrefix(r, "GET /api/v3/work_packages?") {
+		if strings.HasPrefix(r, "GET /api/v3/projects/4/work_packages?") {
 			u, _ := url.Parse(strings.TrimPrefix(r, "GET "))
 			filters = u.Query().Get("filters")
 		}
 	}
-	if want := `"project":{"operator":"=","values":["4","6","9"]}`; !strings.Contains(filters, want) {
-		t.Errorf("filters %s lack %s (root first, then descendants by id)", filters, want)
+	// The project endpoint scopes to 4; subprojectId lists the descendants by
+	// id, without 7, which has no parent link to the tree.
+	if want := `"subprojectId":{"operator":"=","values":["6","9"]}`; !strings.Contains(filters, want) || strings.Contains(filters, `"project"`) {
+		t.Errorf("filters %s: want %s and no project filter", filters, want)
 	}
 
 	if _, err := ByCmd("wp list").Execute(context.Background(), env, Args{"project": "all", "subprojects": true}); err == nil {

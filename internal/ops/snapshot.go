@@ -109,56 +109,33 @@ func snapshotVersionOf(v map[string]any) snapshotVersion {
 	}
 }
 
-// buildSnapshot keeps the projects whose parent chain reaches the root, sorted
-// by id, each with its path of identifiers from the root. The ancestor filter
-// follows the server's nested set, which can disagree with the parent links;
-// the parent links are what the web UI shows, so they decide. The rest are
-// returned as skipped ("IDENT (#id)").
+// buildSnapshot keeps the projects whose parent chain reaches the root
+// (projectTree), sorted by id, each with its path of identifiers from the
+// root. The rest are returned as skipped.
 func buildSnapshot(rootID int, projects []map[string]any, webURL func(string) string) (*snapshot, []string) {
-	byID := map[int]map[string]any{}
+	paths, skipped := projectTree(rootID, projects)
+	s := &snapshot{Projects: []snapshotProject{}}
 	for _, p := range projects {
-		byID[intOf(p["id"])] = p
-	}
-	path := func(id int) []string {
-		var rev []string
-		for hops := 0; hops <= len(byID); hops++ {
-			p := byID[id]
-			if p == nil {
-				return nil
-			}
-			rev = append(rev, strOf(p["identifier"]))
-			if id == rootID {
-				for i, j := 0, len(rev)-1; i < j; i, j = i+1, j-1 {
-					rev[i], rev[j] = rev[j], rev[i]
-				}
-				return rev
-			}
-			id = intOf(p["parentId"])
-		}
-		return nil
-	}
-	s := &snapshot{Root: strOf(byID[rootID]["identifier"]), Projects: []snapshotProject{}}
-	var skipped []string
-	for id, p := range byID {
-		pp := path(id)
-		if pp == nil {
-			skipped = append(skipped, fmt.Sprintf("%s (#%d)", strOf(p["identifier"]), id))
+		id := intOf(p["id"])
+		path, ok := paths[id]
+		if !ok {
 			continue
 		}
 		sp := snapshotProject{
-			ID: id, Identifier: strOf(p["identifier"]), Name: strOf(p["name"]), Path: pp,
+			ID: id, Identifier: strOf(p["identifier"]), Name: strOf(p["name"]), Path: path,
 			Status: strOf(p["status"]), StatusExplanation: strOf(p["statusExplanation"]), Description: strOf(p["description"]),
 			Active: p["active"] == true, Public: p["public"] == true,
 			CreatedAt: strOf(p["createdAt"]), UpdatedAt: strOf(p["updatedAt"]),
 			URL: webURL(strOf(p["identifier"])), Versions: []snapshotVersion{},
 		}
-		if id != rootID {
+		if id == rootID {
+			s.Root = sp.Identifier
+		} else {
 			sp.Parent, sp.ParentID = strOf(p["parent"]), intOf(p["parentId"])
 		}
 		s.Projects = append(s.Projects, sp)
 	}
 	sort.Slice(s.Projects, func(i, j int) bool { return s.Projects[i].ID < s.Projects[j].ID })
-	sort.Strings(skipped)
 	return s, skipped
 }
 
