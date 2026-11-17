@@ -54,7 +54,9 @@ func localImages(text, baseDir string) ([]imageRef, error) {
 		if u, err := url.PathUnescape(target); err == nil {
 			p = u
 		}
-		if !filepath.IsAbs(p) {
+		// A leading slash is rooted on every OS: on Windows filepath.IsAbs
+		// wants a drive letter, and /api/v3/... would resolve under baseDir.
+		if !filepath.IsAbs(p) && !strings.HasPrefix(p, "/") {
 			p = filepath.Join(baseDir, p)
 		} else if _, err := os.Stat(p); err != nil {
 			continue
