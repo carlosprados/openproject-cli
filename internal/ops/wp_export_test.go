@@ -137,3 +137,25 @@ func TestExportListArgsByID(t *testing.T) {
 		t.Fatalf("filter = %v", la["filter"])
 	}
 }
+
+func TestExportDisplayIDAndLists(t *testing.T) {
+	x := testExporter(t, Args{"name": "id", "links": "wikilink"})
+	path := filepath.Join(t.TempDir(), "map.yaml")
+	os.WriteFile(path, []byte("fields:\n  id: id\n  displayId: ref\n  parent: padre\nlists:\n  aliases: [displayId]\n  tags: [customFields.Tags, status]\n"), 0o644)
+	if err := x.loadMap(path); err != nil {
+		t.Fatal(err)
+	}
+	wp := map[string]any{"id": 42, "displayId": "DEMO-7", "parent": "Epic", "parentId": 7, "status": "New", "customFields": map[string]any{"Tags": []any{"a", "b"}}}
+	doc, err := x.render(wp, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "---\nid: 42\nref: DEMO-7\npadre: '[[7]]'\naliases:\n  - DEMO-7\ntags:\n  - a\n  - b\n  - New\n---\n"
+	if got := string(doc.Content); got != want || doc.File != "42.md" {
+		t.Fatalf("file %s, got:\n%s\nwant:\n%s", doc.File, got, want)
+	}
+	delete(wp, "displayId")
+	if doc, _ = x.render(wp, nil); strings.Contains(string(doc.Content), "aliases") {
+		t.Fatalf("empty list written:\n%s", doc.Content)
+	}
+}

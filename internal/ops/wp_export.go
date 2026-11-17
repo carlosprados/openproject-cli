@@ -30,7 +30,7 @@ const exportManifest = ".export.json"
 
 // defaultExportFields is the frontmatter without --map, in this order.
 var defaultExportFields = []string{
-	"id", "subject", "type", "status", "statusIsClosed", "priority", "project",
+	"id", "displayId", "subject", "type", "status", "statusIsClosed", "priority", "project",
 	"assignee", "responsible", "author", "version", "parent", "startDate", "dueDate",
 	"estimatedTime", "remainingTime", "spentTime", "percentageDone", "storyPoints",
 	"createdAt", "updatedAt", "url", "customFields",
@@ -99,6 +99,11 @@ name. --map takes a YAML file:
     subject: title
     status: state
     customFields.Customer: customer    # flattened to the top level
+
+lists: builds list properties from fields, e.g. Obsidian aliases:
+
+  lists:
+    aliases: [displayId]
 
 --set KEY=VALUE adds constants per run. The body is the description in
 clean Markdown: the HTML the editor stores (tables, <br>, <p>, links,
@@ -232,11 +237,19 @@ type exportDoc struct {
 
 type exportField struct{ src, key string }
 
+// exportList is a list property built from several fields (lists: in --map),
+// e.g. aliases: [displayId].
+type exportList struct {
+	key  string
+	srcs []string
+}
+
 type exporter struct {
 	e        *Env
 	a        Args
 	fields   []exportField // nil: the default fields with their own names
 	set      [][2]string
+	lists    []exportList
 	byID     bool
 	wikilink bool
 	loc      *time.Location
@@ -316,12 +329,27 @@ func (x *exporter) loadMap(path string) error {
 				}
 				x.fields = append(x.fields, exportField{src, dst})
 			}
+		case "lists":
+			for j := 0; j+1 < len(val.Content); j += 2 {
+				l := exportList{key: val.Content[j].Value}
+				if val.Content[j+1].Kind != yaml.SequenceNode {
+					return fmt.Errorf("--map %s: lists.%s must be a list of fields", path, l.key)
+				}
+				for _, n := range val.Content[j+1].Content {
+					src := n.Value
+					if a, ok := exportAliases[src]; ok {
+						src = a
+					}
+					l.srcs = append(l.srcs, src)
+				}
+				x.lists = append(x.lists, l)
+			}
 		case "set":
 			for j := 0; j+1 < len(val.Content); j += 2 {
 				x.setConst(val.Content[j].Value, val.Content[j+1].Value)
 			}
 		default:
-			return fmt.Errorf("--map %s: unknown key %q (want fields, set)", path, key)
+			return fmt.Errorf("--map %s: unknown key %q (want fields, lists, set)", path, key)
 		}
 	}
 	return nil
@@ -466,6 +494,26 @@ func (x *exporter) render(it map[string]any, comments []exportComment) (exportDo
 			continue
 		}
 		if err := add(f.key, v); err != nil {
+			return doc, err
+		}
+	}
+	for _, l := range x.lists {
+		var vs []any
+		for _, src := range l.srcs {
+			v := x.value(it, src)
+			if isEmpty(v) {
+				continue
+			}
+			if many, ok := v.([]any); ok {
+				vs = append(vs, many...)
+			} else {
+				vs = append(vs, v)
+			}
+		}
+		if len(vs) == 0 {
+			continue
+		}
+		if err := add(l.key, vs); err != nil {
 			return doc, err
 		}
 	}

@@ -182,7 +182,8 @@ opcli time status -o json                                  # is a timer running?
   project-based identifiers; pass any of `42`, `#42` or `PROJ-42` (case does
   not matter). The project-based one costs a request to find the numeric id,
   once per run, and is not found on instances without them: use the id there.
-  `-o json` carries both, `id` and `displayId`.
+  `-o json` carries both, `id` and `displayId` (`wp list` included; absent
+  on instances without project-based identifiers).
 
 ### Flow: throughput and cycle time
 
@@ -241,7 +242,7 @@ project.
 - Frontmatter types: ids and numbers are numbers, dates `YYYY-MM-DD`,
   `createdAt`/`updatedAt` local `YYYY-MM-DDTHH:MM` (OpenProject time zone),
   durations hours as numbers, `version` (not `targetVersions`), lists as
-  YAML lists; empty fields are left out. Default fields: `id subject type
+  YAML lists; empty fields are left out. Default fields: `id displayId subject type
   status statusIsClosed priority project assignee responsible author version
   parent startDate dueDate estimatedTime remainingTime spentTime
   percentageDone storyPoints createdAt updatedAt url customFields` (custom
@@ -258,7 +259,19 @@ project.
     customFields.Customer: customer
   ```
 
+- `lists:` in the map builds list properties from fields (lists are
+  merged, empty values skipped), e.g. Obsidian aliases so `[[PROJ-12]]`
+  finds the file:
+
+  ```yaml
+  lists:
+    aliases: [displayId]
+  ```
+
 - `--links wikilink` writes `parent` as `"[[<parent's file name>]]"`.
+- File names and wikilinks use the numeric id, never `displayId`: the
+  project-based identifier changes when a work package moves to another
+  project, the id does not.
 - The body is clean Markdown: the HTML the editor stores (tables, `<br>`,
   `<p>`, `<strong>`, links, images, `<details>`) is converted (tables to GFM,
   a `<details>` summary to a bold line), except inside code; mentions become
