@@ -116,6 +116,7 @@ opcli wp list --status "In progress,On hold" --sort dueDate:asc -o json
 opcli wp list --author me --responsible none --priority High -o json
 opcli wp list --version "v1.2" --project demo-project -o json
 opcli wp list --parent 42 -o json                          # direct children
+opcli wp list -p programme --subprojects --status all -o json   # a project and all its subprojects
 opcli wp list --project demo-project --field "Customer=ACME" --field "Billable=yes" -o json
 opcli wp list --project demo-project --field "Area=Backend,Ops" --field "Due to customer=" -o json   # "NAME=" = empty
 opcli wp list --updated-after -7d --status all -o json    # also --updated-before
@@ -144,6 +145,13 @@ opcli time status -o json                                  # is a timer running?
 - `wp list` defaults: open work packages, the configured project (else every
   project), 50 results, most recently updated first. `--max 0` fetches all.
   Flags combine with AND; `--query-id` ignores the other filters.
+- Whether `--project X` also returns its subprojects' work packages depends
+  on an instance setting ("display subprojects work packages"), so do not
+  rely on it. `--subprojects` always includes every project below X, at any
+  depth (one extra request), whatever the setting; it needs a project, not
+  `all`. There is no reliable way to exclude subprojects: check `project`
+  in the items with `jq`. `--field` and `--version` names resolve in X:
+  versions shared with the subprojects work.
 - `--field NAME=VALUE` filters by any field by its name, custom fields
   included: text matches by "contains", lists, users and versions by name,
   booleans `yes`/`no`, dates as usual. It needs a project. OpenProject cannot
@@ -175,6 +183,7 @@ opcli time status -o json                                  # is a timer running?
 ```sh
 opcli wp flow -p demo-project -o json                    # closed in the last 30 days
 opcli wp flow -p all --since 12w --type Task -o json
+opcli wp flow -p programme --subprojects --since 4w -o json   # the whole project tree
 opcli wp flow -p demo-project --since 2026-07-01 --until 2026-09-30 -o json
 opcli wp flow -p demo-project --start-status "In progress" --assignee me --list
 ```

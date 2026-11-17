@@ -1263,6 +1263,7 @@ Effect: read-only
 | Flag | Type | Default | Description |
 |---|---|---|---|
 | `--project` | string |  | Project id, identifier or name; 'all' for every project (default: configured project) |
+| `--subprojects` | bool |  | Also include every subproject of --project, at any depth |
 | `--since` | string | `30d` | Start of the period: 30d, 12w, YYYY-MM-DD, week, month |
 | `--until` | string |  | End of the period, inclusive (YYYY-MM-DD, today, -7d; default today) |
 | `--type` | string |  | Comma-separated type names/ids |
@@ -1273,6 +1274,7 @@ Effect: read-only
 ```sh
   opcli wp flow -p demo-project
   opcli wp flow -p demo-project --since 12w --type Task
+  opcli wp flow -p programme --subprojects --since 4w
   opcli wp flow --project all --since 2026-01-01 --until 2026-03-31 -o json
   opcli wp flow -p demo-project --start-status "In progress" --list
 ```
@@ -1303,7 +1305,9 @@ List and search work packages with filters
 
 List work packages. Filters combine with AND. By default only open work
 packages are shown, in the configured default project (if any), most
-recently updated first.
+recently updated first. Whether --project also matches its subprojects
+depends on an instance setting; --subprojects always includes every project
+below it, at any depth.
 
 --status accepts: open (default), closed, all, or a comma-separated list of
 status names/ids ("New,In progress"). --assignee/--author/--responsible accept
@@ -1340,6 +1344,7 @@ Effect: read-only
 | Flag | Type | Default | Description |
 |---|---|---|---|
 | `--project` | string |  | Project id, identifier or name; 'all' for every project (default: configured project) |
+| `--subprojects` | bool |  | Also include every subproject of --project, at any depth |
 | `--status` | string | `open` | open, closed, all, or comma-separated status names/ids |
 | `--type` | string |  | Comma-separated type names/ids (Task, Bug, Feature...) |
 | `--assignee` | string |  | me, none, or login/email/name/id |
@@ -1368,6 +1373,7 @@ Effect: read-only
   opcli wp list                                  # open WPs, default project
   opcli wp list --assignee me --project all      # my open work, everywhere
   opcli wp list -p demo-project --type Bug --status all
+  opcli wp list -p programme --subprojects --assignee me   # a project and every subproject
   opcli wp list --search "login timeout" --max 10
   opcli wp list --status "In progress,On hold" --sort dueDate:asc
   opcli wp list -p demo-project --field "Customer=ACME" --field "Billable=yes"

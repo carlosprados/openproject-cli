@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -345,6 +346,31 @@ func (e *Env) ProjectID(ctx context.Context, ref string) (int, error) {
 	e.cache.projects[ref] = id
 	e.cache.mu.Unlock()
 	return id, nil
+}
+
+// projectScope returns pid and, with subprojects, every project below it
+// at any depth, for a "project =" work package filter. On its own that
+// filter follows the instance setting "display subprojects work packages";
+// listing every descendant makes the result independent of it.
+func (e *Env) projectScope(ctx context.Context, pid int, subprojects bool) ([]any, error) {
+	scope := []any{pid}
+	if !subprojects {
+		return scope, nil
+	}
+	f := NewFilters().Add("ancestor", "=", pid)
+	items, _, err := e.C.Collect(ctx, "/projects", url.Values{"filters": {f.JSON()}}, 0)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]int, 0, len(items))
+	for _, it := range items {
+		ids = append(ids, intOf(it["id"]))
+	}
+	sort.Ints(ids)
+	for _, id := range ids {
+		scope = append(scope, id)
+	}
+	return scope, nil
 }
 
 // WorkPackageID parses "123" or "#123".

@@ -48,7 +48,9 @@ var wpList = &Op{
 	Short:   "List and search work packages with filters",
 	Long: `List work packages. Filters combine with AND. By default only open work
 packages are shown, in the configured default project (if any), most
-recently updated first.
+recently updated first. Whether --project also matches its subprojects
+depends on an instance setting; --subprojects always includes every project
+below it, at any depth.
 
 --status accepts: open (default), closed, all, or a comma-separated list of
 status names/ids ("New,In progress"). --assignee/--author/--responsible accept
@@ -82,6 +84,7 @@ broken) is re-read by id and the loss, if any, reported on stderr.`,
 	Example: `  opcli wp list                                  # open WPs, default project
   opcli wp list --assignee me --project all      # my open work, everywhere
   opcli wp list -p demo-project --type Bug --status all
+  opcli wp list -p programme --subprojects --assignee me   # a project and every subproject
   opcli wp list --search "login timeout" --max 10
   opcli wp list --status "In progress,On hold" --sort dueDate:asc
   opcli wp list -p demo-project --field "Customer=ACME" --field "Billable=yes"
@@ -93,6 +96,7 @@ broken) is re-read by id and the loss, if any, reported on stderr.`,
   opcli wp list --assignee me -o json            # machine-readable`,
 	Params: []Param{
 		pProject("Project id, identifier or name; 'all' for every project (default: configured project)"),
+		pSubprojects,
 		{Name: "status", Kind: String, Short: "s", Default: "open", Desc: "open, closed, all, or comma-separated status names/ids"},
 		{Name: "type", Kind: String, Short: "t", Desc: "Comma-separated type names/ids (Task, Bug, Feature...)"},
 		{Name: "assignee", Kind: String, Short: "a", Desc: "me, none, or login/email/name/id"},
@@ -129,7 +133,13 @@ broken) is re-read by id and the loss, if any, reported on stderr.`,
 			if projectID, err = e.ProjectID(ctx, project); err != nil {
 				return nil, err
 			}
-			f = f.Add("project", "=", projectID)
+			scope, err := e.projectScope(ctx, projectID, a.Bool("subprojects"))
+			if err != nil {
+				return nil, err
+			}
+			f = f.Add("project", "=", scope...)
+		} else if a.Bool("subprojects") {
+			return nil, errSubprojectsNeedProject
 		}
 
 		closedFrom, err := ParseDate(a.String("closed_after"))
