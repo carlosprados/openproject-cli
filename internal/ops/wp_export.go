@@ -124,7 +124,7 @@ It is one way: editing the files changes nothing in OpenProject.`,
 		if err != nil {
 			return nil, err
 		}
-		la, err := exportListArgs(a)
+		la, err := exportListArgs(ctx, e, a)
 		if err != nil {
 			return nil, err
 		}
@@ -329,7 +329,7 @@ func (x *exporter) loadMap(path string) error {
 
 // exportListArgs turns export args into wp list args: all matches, and ids
 // as an id filter (any status, any project unless given).
-func exportListArgs(a Args) (Args, error) {
+func exportListArgs(ctx context.Context, e *Env, a Args) (Args, error) {
 	la := Args{}
 	for k, v := range a {
 		switch k {
@@ -347,7 +347,7 @@ func exportListArgs(a Args) (Args, error) {
 		}
 		return la, nil
 	}
-	ids, err := workPackageIDs(a.String("ids"))
+	ids, err := e.workPackages(ctx, a.String("ids"))
 	if err != nil {
 		return nil, err
 	}

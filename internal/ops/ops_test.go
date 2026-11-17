@@ -190,6 +190,9 @@ func (f *fakeOP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"_type":"Group","id":5,"name":"Devs"}`))
 	case r.URL.Path == "/api/v3/statuses":
 		_, _ = w.Write([]byte(`{"_type":"Collection","total":2,"count":2,"_embedded":{"elements":[{"id":1,"name":"New"},{"id":7,"name":"In progress"}]}}`))
+	case r.URL.Path == "/api/v3/work_packages/DEMO-42" && r.Method == "GET":
+		// A project-based identifier: the server answers with the same work package.
+		_, _ = w.Write([]byte(`{"_type":"WorkPackage","id":42,"displayId":"DEMO-42","subject":"S"}`))
 	case r.URL.Path == "/api/v3/work_packages/42" && r.Method == "GET":
 		_, _ = w.Write([]byte(`{"_type":"WorkPackage","id":42,"lockVersion":5,"subject":"S","customField1":"ACME","_links":{"project":{"href":"/api/v3/projects/4","title":"P"},"type":{"href":"/api/v3/types/1","title":"Task"}}}`))
 	case strings.HasSuffix(r.URL.Path, "/form") && r.Method == "POST":

@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -124,7 +125,7 @@ func TestExportWriteRenamesAndReportsGone(t *testing.T) {
 }
 
 func TestExportListArgsByID(t *testing.T) {
-	la, err := exportListArgs(Args{"ids": "42 #43", "filter": `[{"type":{"operator":"=","values":["1"]}}]`, "dir": "x", "comments": 2})
+	la, err := exportListArgs(context.Background(), &Env{}, Args{"ids": "42 #43", "filter": `[{"type":{"operator":"=","values":["1"]}}]`, "dir": "x", "comments": 2})
 	if err != nil {
 		t.Fatal(err)
 	}

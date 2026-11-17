@@ -36,7 +36,7 @@ date means 09:00 that day; times are in your OpenProject time zone.`,
 	},
 	Safety: Write,
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
-		id, err := WorkPackageID(a.String("id"))
+		id, err := e.WorkPackage(ctx, a.String("id"))
 		if err != nil {
 			return nil, err
 		}

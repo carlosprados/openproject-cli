@@ -71,6 +71,7 @@ opcli wp list --assignee me --project all -o json | jq -r '.items[] | "\(.id) \(
 
 | Field | Accepted values |
 |---|---|
+| work package | id (`42`, `#42`), or the project-based identifier the web UI shows (`PROJ-42`, `displayId`), resolved with one request; several, comma- or space-separated, where a command takes several |
 | project | id, identifier, (partial) name; `all` in list commands |
 | status | name or id; in `wp list` also `open` (default), `closed`, `all` |
 | type, priority | name or id |
@@ -177,7 +178,11 @@ opcli time status -o json                                  # is a timer running?
   warned. stdout stays valid JSON: check stderr before trusting a total.
 - `--filter` takes raw API filters for anything without a flag (watchers,
   relative dates…): `opcli help filters` lists operators and names.
-- Work packages are `#42` in OpenProject's UI; pass `42` (or `#42`).
+- Work packages are `#42` in OpenProject's UI, or `PROJ-42` on instances with
+  project-based identifiers; pass any of `42`, `#42` or `PROJ-42` (case does
+  not matter). The project-based one costs a request to find the numeric id,
+  once per run, and is not found on instances without them: use the id there.
+  `-o json` carries both, `id` and `displayId`.
 
 ### Flow: throughput and cycle time
 

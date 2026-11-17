@@ -251,7 +251,7 @@ func runBackfill(ctx context.Context, e *Env, a Args) (any, error) {
 func (e *Env) checkActivity(ctx context.Context, existing string, a Args) error {
 	ref := a.String("activity")
 	if existing != "" {
-		wp, err := WorkPackageID(existing)
+		wp, err := e.WorkPackage(ctx, existing)
 		if err != nil {
 			return err
 		}

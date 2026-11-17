@@ -209,7 +209,7 @@ func (e *Env) listWorkPackages(ctx context.Context, a Args, withDescription bool
 		f = f.Add("targetVersion", "=", vid)
 	}
 	if a.Has("parent") {
-		pid, err := WorkPackageID(a.String("parent"))
+		pid, err := e.WorkPackage(ctx, a.String("parent"))
 		if err != nil {
 			return nil, err
 		}
@@ -477,6 +477,7 @@ var wpGet = &Op{
 	Long: `Show one work package: all its fields, the Markdown description, relations,
 children, attachments and (with --activities) the comment/change history.`,
 	Example: `  opcli wp get 42
+  opcli wp get PROJ-42                    # the project-based id the web UI shows
   opcli wp get 42 --activities
   opcli wp get 42 -o json`,
 	Params: []Param{
@@ -484,7 +485,7 @@ children, attachments and (with --activities) the comment/change history.`,
 		{Name: "activities", Kind: Bool, Desc: "Also include comments and change history"},
 	},
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
-		id, err := WorkPackageID(a.String("id"))
+		id, err := e.WorkPackage(ctx, a.String("id"))
 		if err != nil {
 			return nil, err
 		}
@@ -714,7 +715,7 @@ ones that were updated. Run it with --dry-run first.`,
 	Safety:  Write,
 	Columns: wpColumns,
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
-		ids, err := workPackageIDs(a.String("id"))
+		ids, err := e.workPackages(ctx, a.String("id"))
 		if err != nil {
 			return nil, err
 		}
@@ -745,22 +746,6 @@ ones that were updated. Run it with --dry-run first.`,
 		}
 		return NewList(done, len(done)), nil
 	},
-}
-
-// workPackageIDs parses "42", "42 43", "42,#43".
-func workPackageIDs(ref string) ([]int, error) {
-	var ids []int
-	for _, f := range strings.FieldsFunc(ref, func(r rune) bool { return r == ',' || r == ' ' }) {
-		id, err := WorkPackageID(f)
-		if err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	if len(ids) == 0 {
-		return nil, fmt.Errorf("missing work package id")
-	}
-	return ids, nil
 }
 
 // compactWP drops what listings drop (see wpListNoise).
@@ -915,7 +900,7 @@ func (e *Env) wpPayload(ctx context.Context, a Args, projectID int) (map[string]
 		if p == "" || strings.EqualFold(p, "none") {
 			links["parent"] = hal.Ref("")
 		} else {
-			pid, err := WorkPackageID(p)
+			pid, err := e.WorkPackage(ctx, p)
 			if err != nil {
 				return nil, err
 			}
@@ -1002,7 +987,7 @@ var wpDelete = &Op{
 	Params:  []Param{pID("Work package")},
 	Safety:  Destructive,
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
-		id, err := WorkPackageID(a.String("id"))
+		id, err := e.WorkPackage(ctx, a.String("id"))
 		if err != nil {
 			return nil, err
 		}
@@ -1034,7 +1019,7 @@ that notifies the user (the result lists "mentioned", and
 	},
 	Safety: Write,
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
-		id, err := WorkPackageID(a.String("id"))
+		id, err := e.WorkPackage(ctx, a.String("id"))
 		if err != nil {
 			return nil, err
 		}
@@ -1124,7 +1109,7 @@ var wpActivities = &Op{
 		{Header: "COMMENT", Key: "comment"}, {Header: "CHANGES", Key: "details"},
 	},
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
-		id, err := WorkPackageID(a.String("id"))
+		id, err := e.WorkPackage(ctx, a.String("id"))
 		if err != nil {
 			return nil, err
 		}
@@ -1206,7 +1191,7 @@ Without --field all fields with a finite list of values are shown. Pass
 		{Name: "field", Kind: String, Short: "f", Desc: "Only this field (status, type, priority, category, version, assignee, responsible, project, projectPhase)"},
 	},
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
-		id, err := WorkPackageID(a.String("id"))
+		id, err := e.WorkPackage(ctx, a.String("id"))
 		if err != nil {
 			return nil, err
 		}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,10 +24,13 @@ type resolverCache struct {
 	mu       sync.Mutex
 	catalogs map[string][]named
 	projects map[string]int
-	me       int
-	schemas  map[string]map[string]string // "project-type" → customFieldN → name
-	loc      *time.Location
-	statuses map[int]statusInfo
+	// workPackages maps a project-based work package identifier ("PROJ-42")
+	// to its numeric id, so each one costs a single request per process.
+	workPackages map[string]int
+	me           int
+	schemas      map[string]map[string]string // "project-type" → customFieldN → name
+	loc          *time.Location
+	statuses     map[int]statusInfo
 	// statusLabel is the localised name of the status field, as activity
 	// details print it ("Status", "Estado").
 	statusLabel string
@@ -373,7 +377,78 @@ func (e *Env) projectScope(ctx context.Context, pid int, subprojects bool) ([]an
 	return scope, nil
 }
 
-// WorkPackageID parses "123" or "#123".
+// workPackageDisplayID matches the project-based identifier the web UI shows for
+// a work package (its displayId), such as "PROJ-42": a project prefix, a hyphen
+// and the work package's position in that project. The prefix may carry hyphens
+// itself, so only the last "-<digits>" separates it.
+var workPackageDisplayID = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]*-[0-9]+$`)
+
+// WorkPackage resolves a work package reference to its numeric id. It takes
+// what people, branch names and commit messages carry — "123", "#123" or the
+// project-based identifier the web UI shows ("PROJ-42") — because every other
+// call needs the numeric id. A numeric reference costs no request; a
+// project-based one costs one GET, cached for the rest of the process.
+//
+// API v3 accepts the project-based identifier in place of the id in
+// /work_packages/{id} on instances that have them, and matches its prefix in
+// upper case only ("proj-42" is not found), so the prefix is upper-cased first.
+// On instances without project-based identifiers the GET is a 404, and the
+// error says the numeric id is the way.
+func (e *Env) WorkPackage(ctx context.Context, ref string) (int, error) {
+	ref = strings.TrimSpace(ref)
+	if id, err := WorkPackageID(ref); err == nil {
+		return id, nil
+	}
+	if !workPackageDisplayID.MatchString(ref) {
+		return 0, fmt.Errorf("invalid work package id %q: use 123, #123 or a project-based id such as PROJ-123", ref)
+	}
+	key := strings.ToUpper(ref)
+	e.cache.mu.Lock()
+	id, ok := e.cache.workPackages[key]
+	e.cache.mu.Unlock()
+	if ok {
+		return id, nil
+	}
+	res, err := e.C.Get(ctx, "/work_packages/"+url.PathEscape(key), nil)
+	if err != nil {
+		if client.IsNotFound(err) {
+			return 0, fmt.Errorf("work package %s not found (project-based ids need an OpenProject that has them; the numeric id always works)", key)
+		}
+		return 0, err
+	}
+	if id = intOf(res["id"]); id <= 0 {
+		return 0, fmt.Errorf("work package %s: the server answered without an id", key)
+	}
+	e.cache.mu.Lock()
+	if e.cache.workPackages == nil {
+		e.cache.workPackages = map[string]int{}
+	}
+	e.cache.workPackages[key] = id
+	e.cache.mu.Unlock()
+	return id, nil
+}
+
+// workPackages resolves a comma- or space-separated list of work package
+// references (see WorkPackage), for the commands that act on several at once.
+func (e *Env) workPackages(ctx context.Context, refs string) ([]int, error) {
+	var ids []int
+	for _, f := range strings.FieldsFunc(refs, func(r rune) bool { return r == ',' || r == ' ' }) {
+		id, err := e.WorkPackage(ctx, f)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("missing work package id")
+	}
+	return ids, nil
+}
+
+// WorkPackageID parses a numeric reference, "123" or "#123", with no request.
+// Work package commands go through Env.WorkPackage, which also takes
+// project-based identifiers; this one stays for ids that are not work packages
+// (meetings, agenda items) and for callers that must not hit the server.
 func WorkPackageID(ref string) (int, error) {
 	id, err := strconv.Atoi(strings.TrimPrefix(strings.TrimSpace(ref), "#"))
 	if err != nil || id <= 0 {
