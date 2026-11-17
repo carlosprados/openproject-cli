@@ -1235,6 +1235,11 @@ name. --map takes a YAML file:
     status: state
     customFields.Customer: customer    # flattened to the top level
 
+lists: builds list properties from fields, e.g. Obsidian aliases:
+
+  lists:
+    aliases: [displayId]
+
 --set KEY=VALUE adds constants per run. The body is the description in
 clean Markdown: the HTML the editor stores (tables, <br>, <p>, links,
 images, <details>) is converted outside code, and mentions become @Name.

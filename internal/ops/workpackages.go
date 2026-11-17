@@ -431,7 +431,7 @@ func (e *Env) resolveMany(ctx context.Context, refs []string, fn func(context.Co
 // description and the rest are available through wp get).
 var wpListNoise = map[string]bool{
 	"description": true, "laborCosts": true, "position": true, "hasProjectAttributes": true,
-	"ignoreNonWorkingDays": true, "scheduleManually": true, "displayId": true, "lockVersion": true,
+	"ignoreNonWorkingDays": true, "scheduleManually": true, "lockVersion": true,
 	"derivedStartDate": true, "derivedDueDate": true, "derivedEstimatedTime": true,
 	"derivedRemainingTime": true, "derivedPercentageDone": true, "backlogBucket": true,
 }
@@ -466,6 +466,10 @@ func (e *Env) decorateWP(ctx context.Context, it map[string]any) {
 		it["url"] = e.C.WebURL(fmt.Sprintf("/work_packages/%d", id))
 	}
 	delete(it, "_type")
+	// Instances without project-based identifiers repeat the id there.
+	if d, ok := it["displayId"]; ok && fmt.Sprint(d) == fmt.Sprint(it["id"]) {
+		delete(it, "displayId")
+	}
 	e.decorateStatus(ctx, it)
 	e.customFieldLabels(ctx, []map[string]any{it})
 }
