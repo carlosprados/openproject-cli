@@ -133,6 +133,7 @@ func (e *Env) listWorkPackages(ctx context.Context, a Args, withDescription bool
 		return e.runSavedQuery(ctx, qid, a)
 	}
 	f := NewFilters()
+	path := "/work_packages"
 	project := a.String("project")
 	projectID := 0
 	if !strings.EqualFold(project, "all") && (project != "" || e.DefaultProject != "") {
@@ -140,11 +141,9 @@ func (e *Env) listWorkPackages(ctx context.Context, a Args, withDescription bool
 		if projectID, err = e.ProjectID(ctx, project); err != nil {
 			return nil, err
 		}
-		scope, err := e.projectScope(ctx, projectID, a.Bool("subprojects"))
-		if err != nil {
+		if f, path, err = e.workPackageScope(ctx, f, projectID, a.Bool("subprojects")); err != nil {
 			return nil, err
 		}
-		f = f.Add("project", "=", scope...)
 	} else if a.Bool("subprojects") {
 		return nil, errSubprojectsNeedProject
 	}
@@ -256,7 +255,7 @@ func (e *Env) listWorkPackages(ctx context.Context, a Args, withDescription bool
 		}
 		q.Set("sortBy", sb)
 	}
-	l, err := e.listWith(ctx, "/work_packages", q, la, e.wpPageFallback("/work_packages"))
+	l, err := e.listWith(ctx, path, q, la, e.wpPageFallback(path))
 	if err != nil {
 		if strings.Contains(err.Error(), "filter does not exist") && a.Has("field") {
 			return nil, fmt.Errorf("%w: OpenProject cannot filter by this field (user and version custom fields are not filterable); filter by another field and check the value with jq", err)

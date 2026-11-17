@@ -49,8 +49,10 @@ are UTC in JSON; text output shows them in local time, to the minute.
 | `time status` | `{running: false}` or the running entry + `running: true`, `elapsed` |
 | `wp delete`, `time delete`, `notification read`, … | `{ok: true, message}` |
 | `wp flow` | `{project, from, to, startStatuses, throughput, weekly, cycleTime, leadTime, statuses, workPackages}` (see Flow) |
+| `wp changes` | `{project, since, until, workPackages, count, events: [{at, wp, displayId?, subject, project, user, kind, field?, from?, to?, text?, diff?, comment?, internal?, activity}]}` (see Changes) |
 | `wp backfill` | plan or result: `workPackage`, `startDate`, `dueDate`, `totalHours`, `days[]` (`date`, `hours`, `timeEntryId`), `comment` |
 | `wp export --dir` | `{dir, count, created, updated, unchanged, renamed: [{id, from, to}], gone: [ids], downloaded, files: [{id, file, status}]}`; without `--dir`: `{id, markdown}` (see Export) |
+| `project snapshot` | `{root, projects: [{id, identifier, name, path, parent?, parentId?, status?, statusExplanation?, description?, active, public, createdAt, updatedAt, url, versions: [{id, name, status, startDate?, endDate?, sharing, description?, createdAt, updatedAt}]}]}` (see Projects) |
 
 Records are flattened from HAL: a link becomes its title plus an id
 (`"status": "In progress", "statusId": 7`); Markdown fields are plain strings;
@@ -151,7 +153,9 @@ opcli time status -o json                                  # is a timer running?
   on an instance setting ("display subprojects work packages"), so do not
   rely on it. `--subprojects` always includes every project below X, at any
   depth (one extra request), whatever the setting; it needs a project, not
-  `all`. There is no reliable way to exclude subprojects: check `project`
+  `all`. "Below" follows the parent links, the tree the web UI shows: a
+  project the server keeps below X by mistake without a parent link to it is
+  left out, with a warning on stderr. There is no reliable way to exclude subprojects: check `project`
   in the items with `jq`. `--field` and `--version` names resolve in X:
   versions shared with the subprojects work.
 - `--field NAME=VALUE` filters by any field by its name, custom fields
@@ -210,6 +214,28 @@ statuses default to the `doing` ones; `--start-status` picks others. Closed
 without a start status: throughput only. Statuses are read from each work
 package's activities whatever the user's language. `--list` lists the work
 packages in text output.
+
+### Changes: what happened in a period
+
+```sh
+opcli wp changes -p demo-project -o json                      # the last 7 days
+opcli wp changes -p programme --subprojects --since 4w -o json
+opcli wp changes -p demo-project --since 2026-11-01 --until 2026-11-15 --kind comment,field
+opcli wp changes 42 43 --since 30d
+```
+
+`wp changes` reads the activity history of the work packages updated in the
+period (`--since`, default `7d`; also `4w` or a date; `--until`, default
+today) and lists `events`, oldest first, one per thing that happened:
+`kind` is `created`, `comment` (with `comment`, the Markdown) or `field` (one
+per field changed: `field` is the label as OpenProject shows it, in your
+language, custom fields by name; `from` absent when it was empty, `to`
+absent when it was cleared). The description has no values, only `diff`,
+the web page with the change; a change OpenProject words differently keeps
+its wording in `text`. `at` is UTC. It takes the `wp list` filters (status
+defaults to all) or ids; `--kind` keeps only some kinds. One request per work
+package: long periods on busy projects take a while. To leave out your own
+changes, filter `user` with `jq`.
 
 ### Export to Markdown files
 
@@ -488,6 +514,7 @@ opcli meeting update "$MID" --state closed
 
 ```sh
 opcli project get demo-project -o json
+opcli project snapshot programme -o json | jq -r '.projects[].path | join("/")'   # the tree, deterministic
 opcli project list --search web --archived -o json
 opcli project list --filter '[{"active":{"operator":"=","values":["t"]}}]' -o json
 opcli project create --name "Website" --identifier website --parent platform --public --description-file about.md
@@ -506,6 +533,16 @@ opcli membership update 31 --roles Reader --notify=false
 `membership add` and `membership update` email the member (every user of a
 group) by default; pass `--notify=false` for bulk changes. `--message` adds a
 custom text to that email and cannot go with `--notify=false`.
+
+`project snapshot` reads a project, every subproject below it and the
+versions each one defines, as one document: projects sorted by id, each with
+`path` (identifiers from the root) and its `versions` (sorted by id; a shared
+version appears only under the project that defines it). Nothing in it comes
+from opcli (no timestamps of its own), so the same server state gives the same
+bytes: commit or diff it to see what changed in the tree. Work packages are
+not in it: `wp export` covers them. A project the server lists below the root
+whose parent links do not reach it is left out with a warning on stderr. Text
+output is an indented tree.
 
 ## Anything else: the raw API
 

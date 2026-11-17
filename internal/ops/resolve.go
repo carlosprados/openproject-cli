@@ -352,29 +352,82 @@ func (e *Env) ProjectID(ctx context.Context, ref string) (int, error) {
 	return id, nil
 }
 
-// projectScope returns pid and, with subprojects, every project below it
-// at any depth, for a "project =" work package filter. On its own that
-// filter follows the instance setting "display subprojects work packages";
-// listing every descendant makes the result independent of it.
-func (e *Env) projectScope(ctx context.Context, pid int, subprojects bool) ([]any, error) {
-	scope := []any{pid}
+// workPackageScope adds pid to the work package filters f and returns the
+// collection to read them from. Without subprojects it is a "project ="
+// filter on /work_packages, which follows the instance setting "display
+// subprojects work packages". With subprojects it reads
+// /projects/{pid}/work_packages with a "subprojectId =" filter listing every
+// project below pid, so the result does not depend on that setting. The
+// listed projects are those whose parent links reach pid (see projectTree):
+// a "project =" filter expands each id through the server's nested set, which
+// can hold projects that are not in the tree the web UI shows.
+func (e *Env) workPackageScope(ctx context.Context, f Filters, pid int, subprojects bool) (Filters, string, error) {
 	if !subprojects {
-		return scope, nil
+		return f.Add("project", "=", pid), "/work_packages", nil
 	}
-	f := NewFilters().Add("ancestor", "=", pid)
-	items, _, err := e.C.Collect(ctx, "/projects", url.Values{"filters": {f.JSON()}}, 0)
+	anc := NewFilters().Add("ancestor", "=", pid)
+	items, _, err := e.C.Collect(ctx, "/projects", url.Values{"filters": {anc.JSON()}}, 0)
 	if err != nil {
-		return nil, err
+		return f, "", err
 	}
-	ids := make([]int, 0, len(items))
-	for _, it := range items {
-		ids = append(ids, intOf(it["id"]))
+	paths, skipped := projectTree(pid, append([]map[string]any{{"id": pid}}, hal.FlattenAll(items)...))
+	if len(skipped) > 0 {
+		e.warnf("left out %s: the server lists them below project %d but their parent chain does not reach it", strings.Join(skipped, ", "), pid)
+	}
+	var ids []int
+	for id := range paths {
+		if id != pid {
+			ids = append(ids, id)
+		}
 	}
 	sort.Ints(ids)
-	for _, id := range ids {
-		scope = append(scope, id)
+	path := fmt.Sprintf("/projects/%d/work_packages", pid)
+	if len(ids) == 0 {
+		return f.Add("subprojectId", "!*"), path, nil
 	}
-	return scope, nil
+	vals := make([]any, len(ids))
+	for i, id := range ids {
+		vals[i] = id
+	}
+	return f.Add("subprojectId", "=", vals...), path, nil
+}
+
+// projectTree follows the parent links of projects (the root and those the
+// ancestor filter returned) and gives the path of identifiers from the root
+// of each one that reaches it. The ancestor filter follows the server's
+// nested set, which can disagree with the parent links; the parent links are
+// what the web UI shows, so they decide. The rest come back as skipped
+// ("IDENT (#id)"), sorted.
+func projectTree(rootID int, projects []map[string]any) (map[int][]string, []string) {
+	byID := map[int]map[string]any{}
+	for _, p := range projects {
+		byID[intOf(p["id"])] = p
+	}
+	paths := map[int][]string{}
+	var skipped []string
+	for id, p := range byID {
+		var rev []string
+		reached := false
+		for cur, hops := id, 0; hops <= len(byID) && !reached; hops++ {
+			q := byID[cur]
+			if q == nil {
+				break
+			}
+			rev = append(rev, fmt.Sprint(q["identifier"]))
+			reached = cur == rootID
+			cur = intOf(q["parentId"])
+		}
+		if !reached {
+			skipped = append(skipped, fmt.Sprintf("%v (#%d)", p["identifier"], id))
+			continue
+		}
+		for i, j := 0, len(rev)-1; i < j; i, j = i+1, j-1 {
+			rev[i], rev[j] = rev[j], rev[i]
+		}
+		paths[id] = rev
+	}
+	sort.Strings(skipped)
+	return paths, skipped
 }
 
 // workPackageDisplayID matches the project-based identifier the web UI shows for
