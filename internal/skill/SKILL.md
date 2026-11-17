@@ -51,6 +51,7 @@ are UTC in JSON; text output shows them in local time, to the minute.
 | `wp flow` | `{project, from, to, startStatuses, throughput, weekly, cycleTime, leadTime, statuses, workPackages}` (see Flow) |
 | `wp backfill` | plan or result: `workPackage`, `startDate`, `dueDate`, `totalHours`, `days[]` (`date`, `hours`, `timeEntryId`), `comment` |
 | `wp export --dir` | `{dir, count, created, updated, unchanged, renamed: [{id, from, to}], gone: [ids], downloaded, files: [{id, file, status}]}`; without `--dir`: `{id, markdown}` (see Export) |
+| `project snapshot` | `{root, projects: [{id, identifier, name, path, parent?, parentId?, status?, statusExplanation?, description?, active, public, createdAt, updatedAt, url, versions: [{id, name, status, startDate?, endDate?, sharing, description?, createdAt, updatedAt}]}]}` (see Projects) |
 
 Records are flattened from HAL: a link becomes its title plus an id
 (`"status": "In progress", "statusId": 7`); Markdown fields are plain strings;
@@ -488,6 +489,7 @@ opcli meeting update "$MID" --state closed
 
 ```sh
 opcli project get demo-project -o json
+opcli project snapshot programme -o json | jq -r '.projects[].path | join("/")'   # the tree, deterministic
 opcli project list --search web --archived -o json
 opcli project list --filter '[{"active":{"operator":"=","values":["t"]}}]' -o json
 opcli project create --name "Website" --identifier website --parent platform --public --description-file about.md
@@ -506,6 +508,16 @@ opcli membership update 31 --roles Reader --notify=false
 `membership add` and `membership update` email the member (every user of a
 group) by default; pass `--notify=false` for bulk changes. `--message` adds a
 custom text to that email and cannot go with `--notify=false`.
+
+`project snapshot` reads a project, every subproject below it and the
+versions each one defines, as one document: projects sorted by id, each with
+`path` (identifiers from the root) and its `versions` (sorted by id; a shared
+version appears only under the project that defines it). Nothing in it comes
+from opcli (no timestamps of its own), so the same server state gives the same
+bytes: commit or diff it to see what changed in the tree. Work packages are
+not in it: `wp export` covers them. A project the server lists below the root
+whose parent links do not reach it is left out with a warning on stderr. Text
+output is an indented tree.
 
 ## Anything else: the raw API
 

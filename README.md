@@ -53,6 +53,8 @@ Tested against OpenProject 17.8 (API v3).
   (free text or work packages), states, and outcomes linked to follow-up work.
 - **Reminders** on work packages, and **bulk updates** (`wp update 42 43 44 …`).
 - **Projects, versions, memberships, users, notifications, saved queries**,
+  a deterministic JSON snapshot of a project tree with its versions
+  (`opcli project snapshot`),
   plus reference data (statuses, types, priorities, roles).
 - **Names instead of ids** everywhere: `--project website`, `--status "In progress"`,
   `--assignee me`, `--type Bug`, `--due-date +7d`, `--hours 1h30m`. Ambiguous or
