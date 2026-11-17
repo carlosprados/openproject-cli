@@ -36,6 +36,11 @@ Tested against OpenProject 17.8 (API v3).
 - **Flow metrics**: `opcli wp flow` — throughput per week, cycle and lead time
   (p50/p85) and time per status of what was closed in a period, with each
   work package's status history.
+- **Export to Markdown**: `opcli wp export` writes work packages as Markdown
+  files with YAML frontmatter (fields mapped and renamed with `--map`), the
+  editor's HTML converted to Markdown and images (or every attachment)
+  downloaded alongside, for notes, static sites or archives; deterministic,
+  renames instead of duplicating, never deletes.
 - **Markdown with images**: `![shot](shot.png)` in a description or comment is
   uploaded as an attachment and rendered; `--attach` sends files along with a
   create or update (on create they are claimed atomically by the new work
@@ -107,6 +112,7 @@ Common recipes:
 opcli wp list -p website --type Bug --search "timeout"
 opcli wp list --status all --updated-after -3d
 opcli wp flow -p website --since 12w             # throughput and cycle time
+opcli wp export -p website --status all --dir notes/   # one Markdown file per work package
 opcli wp get 42 --activities
 opcli wp allowed 42 --field status                 # valid transitions right now
 opcli wp fields -p website --type Bug              # fields, custom ones included, and their values
