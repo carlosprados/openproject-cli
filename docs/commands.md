@@ -59,6 +59,7 @@ Generated with `opcli docs`. Global flags: `--config`, `--url`, `--api-key`, `-o
 | `opcli wp attachment list` | read-only | List attachments of a work package |
 | `opcli wp attachment upload` | writes | Attach a local file to a work package |
 | `opcli wp backfill` | writes | Record work done after the fact: real dates, hours per day and an audit comment |
+| `opcli wp changes` | read-only | What changed in a period: creations, comments and field changes, oldest first |
 | `opcli wp comment` | writes | Add a comment to a work package |
 | `opcli wp comment-edit` | writes | Replace the text of a comment |
 | `opcli wp create` | writes | Create a work package |
@@ -1110,6 +1111,62 @@ Effect: writes
   opcli wp backfill --wp 42 --from 2026-09-21 --to 2026-09-23 --hours-per-day 2h \
     --reason "Done during the incident, not reported until today"
   opcli wp backfill --wp 42 --from -10d --to -8d     # only fix the dates, no time entries
+```
+
+## opcli wp changes
+
+What changed in a period: creations, comments and field changes, oldest first
+
+List what happened to work packages in a period (default the last 7 days),
+read from their activity history: one event per creation, comment and field
+change, sorted by time.
+
+The work packages are those the wp list filters select (default: any status)
+that were updated since --since, or the ids given. Each one costs one request
+for its history, so long periods on busy projects take a while.
+
+A field change carries the field's label as OpenProject shows it (in your
+language; custom fields by name) and its values as text: from (absent when it
+was empty) and to (absent when it was cleared). Changes whose values
+OpenProject does not show (the description: only a link to the diff) have
+neither, and diff, the web page with the change, when there is one;
+changes it words differently keep their wording in text.
+
+Effect: read-only
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<ids>` (arg) | string |  | Work package ids (instead of, or on top of, the filters) |
+| `--project` | string |  | Project id, identifier or name; 'all' for every project (default: configured project) |
+| `--subprojects` | bool |  | Also include every subproject of --project, at any depth |
+| `--status` | string |  | open, closed, all, or comma-separated status names/ids (default: all) |
+| `--type` | string |  | Comma-separated type names/ids (Task, Bug, Feature...) |
+| `--assignee` | string |  | me, none, or login/email/name/id |
+| `--author` | string |  | me, or login/email/name/id |
+| `--responsible` | string |  | Accountable user: me, none, or login/email/name/id |
+| `--priority` | string |  | Comma-separated priority names/ids |
+| `--version` | string |  | Target version name or id (name needs a project) |
+| `--parent` | string |  | Only direct children of this work package id |
+| `--search` | string |  | Full-text search in subject, description and comments |
+| `--field` | list |  | Filter by any field by name, NAME=VALUE (repeatable): "Customer=ACME", "Area=Backend,Ops"; "NAME=" means empty; needs a project |
+| `--updated-before` | string |  | Updated on or before this date |
+| `--created-after` | string |  | Created on or after this date |
+| `--created-before` | string |  | Created on or before this date |
+| `--due-after` | string |  | Due (finish date) on or after this date |
+| `--due-before` | string |  | Due (finish date) on or before this date |
+| `--closed-after` | string |  | Last closed on or after this date (implies --status closed; reads each candidate's history) |
+| `--closed-before` | string |  | Last closed on or before this date (implies --status closed) |
+| `--filter` | string |  | Extra raw API filters as a JSON array (see 'opcli help filters') |
+| `--since` | string | `7d` | Start of the period: 7d, 4w, YYYY-MM-DD, week, month |
+| `--until` | string |  | End of the period, inclusive (YYYY-MM-DD, today, -1d; default today) |
+| `--kind` | string |  | Only these kinds, comma-separated: created, comment, field |
+
+```sh
+  opcli wp changes -p demo-project
+  opcli wp changes -p programme --subprojects --since 7d -o json
+  opcli wp changes -p demo-project --since 2026-11-01 --until 2026-11-15 --kind comment,field
+  opcli wp changes 42 43 --since 30d
+  opcli wp changes -p demo-project -o json | jq '[.events[] | select(.user != "Jane Doe")]'
 ```
 
 ## opcli wp comment
