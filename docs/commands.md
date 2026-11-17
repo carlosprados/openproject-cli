@@ -62,6 +62,7 @@ Generated with `opcli docs`. Global flags: `--config`, `--url`, `--api-key`, `-o
 | `opcli wp comment-edit` | writes | Replace the text of a comment |
 | `opcli wp create` | writes | Create a work package |
 | `opcli wp delete` | **destructive** | Delete a work package (irreversible, children included) |
+| `opcli wp export` | read-only | Export work packages as Markdown files with YAML frontmatter |
 | `opcli wp fields` | read-only | List the fields a work package takes: names, types, required, allowed values |
 | `opcli wp flow` | read-only | Throughput and cycle time: work packages closed in a period, with their status history |
 | `opcli wp get` | read-only | Show a work package with description, relations, children and attachments |
@@ -1201,6 +1202,95 @@ Effect: **destructive**
 
 ```sh
   opcli wp delete 42
+```
+
+## opcli wp export
+
+Export work packages as Markdown files with YAML frontmatter
+
+Write work packages as Markdown: a YAML frontmatter with their fields and
+the description as the body, optionally followed by the last comments. It
+selects work packages with the same filters as 'wp list' (all of them by
+default, not 50; open ones unless --status says otherwise), or by id.
+
+With --dir it writes one file per work package, <id>-<subject>.md (or <id>.md
+with --name id). The output is deterministic: a file whose work package did
+not change is left untouched, and a work package whose subject changed has
+its file renamed, never duplicated. Nothing is ever deleted: DIR/.export.json
+lists what this export wrote (id, file, updatedAt and the filters used), and
+the result names in "gone" the work packages of the previous export that
+this one no longer includes (closed, moved, deleted). Without --dir, a
+single work package is printed to stdout.
+
+Frontmatter: ids and numbers stay numbers, dates are YYYY-MM-DD, createdAt
+and updatedAt are local date and time (YYYY-MM-DDTHH:MM, in your
+OpenProject time zone), durations are hours as a number, the version is
+"version", empty fields are left out, custom fields go under customFields by
+name. --map takes a YAML file:
+
+  set: {kind: wp, generated: true}     # constants
+  fields:                              # only these, in this order, renamed
+    id: id
+    subject: title
+    status: state
+    customFields.Customer: customer    # flattened to the top level
+
+--set KEY=VALUE adds constants per run. The body is the description in
+clean Markdown: the HTML the editor stores (tables, <br>, <p>, links,
+images, <details>) is converted outside code, and mentions become @Name.
+
+--attachments (with --dir): images (default) downloads the attachments the
+description and comments show into DIR/attachments/<id>-<name> and links
+them relatively; all also downloads every attachment of each work package
+and lists them at the end; none leaves links to the server, which need a
+session. Files already downloaded (same size) are not fetched again.
+
+It is one way: editing the files changes nothing in OpenProject.
+
+Effect: read-only
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<ids>` (arg) | string |  | Work package ids (instead of, or on top of, the filters) |
+| `--project` | string |  | Project id, identifier or name; 'all' for every project (default: configured project) |
+| `--subprojects` | bool |  | Also include every subproject of --project, at any depth |
+| `--status` | string |  | open, closed, all, or comma-separated status names/ids (default: open; with ids, all) |
+| `--type` | string |  | Comma-separated type names/ids (Task, Bug, Feature...) |
+| `--assignee` | string |  | me, none, or login/email/name/id |
+| `--author` | string |  | me, or login/email/name/id |
+| `--responsible` | string |  | Accountable user: me, none, or login/email/name/id |
+| `--priority` | string |  | Comma-separated priority names/ids |
+| `--version` | string |  | Target version name or id (name needs a project) |
+| `--parent` | string |  | Only direct children of this work package id |
+| `--search` | string |  | Full-text search in subject, description and comments |
+| `--field` | list |  | Filter by any field by name, NAME=VALUE (repeatable): "Customer=ACME", "Area=Backend,Ops"; "NAME=" means empty; needs a project |
+| `--updated-after` | string |  | Updated on or after this date (YYYY-MM-DD, today, week, month, -7d) |
+| `--updated-before` | string |  | Updated on or before this date |
+| `--created-after` | string |  | Created on or after this date |
+| `--created-before` | string |  | Created on or before this date |
+| `--due-after` | string |  | Due (finish date) on or after this date |
+| `--due-before` | string |  | Due (finish date) on or before this date |
+| `--closed-after` | string |  | Last closed on or after this date (implies --status closed; reads each candidate's history) |
+| `--closed-before` | string |  | Last closed on or before this date (implies --status closed) |
+| `--filter` | string |  | Extra raw API filters as a JSON array (see 'opcli help filters') |
+| `--max` | int | `0` | Maximum work packages to export (0 = all) |
+| `--dir` | string |  | Directory to write one file per work package into (created if missing); without it, a single work package goes to stdout |
+| `--name` | string | `slug` | File names: slug (<id>-<subject>.md) or id (<id>.md) |
+| `--map` | string |  | YAML file choosing and renaming frontmatter fields (fields:) and adding constants (set:) |
+| `--set` | list |  | Constant frontmatter property KEY=VALUE (repeatable; overrides the map's set:) |
+| `--links` | string | `none` | wikilink writes parent as "[[file]]" (the parent's file name) |
+| `--comments` | int |  | Append the last N comments (-1 = all; one request per work package) |
+| `--exclude-comment` | list |  | Activity ids of comments never to export (e.g. one that carries a secret) |
+| `--attachments` | string | `images` | With --dir, download into DIR/attachments/: images (those the text shows), all (every attachment, listed at the end) or none (links stay on the server) |
+
+```sh
+  opcli wp export 42                                   # to stdout
+  opcli wp export -p demo-project --status all --dir notes/
+  opcli wp export -p programme --subprojects --status all --dir wp --name id --links wikilink
+  opcli wp export -p demo-project --dir wp --map wp-map.yaml --set "team=Backend"
+  opcli wp export -p demo-project --dir wp --comments 5 --exclude-comment 1234
+  opcli wp export -p demo-project --dir wp --attachments all
+  opcli wp export -p demo-project --dir wp -o json | jq '.gone'
 ```
 
 ## opcli wp fields

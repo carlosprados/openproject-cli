@@ -1,6 +1,6 @@
 ---
 name: opcli
-description: Read and change work in an OpenProject instance from the shell with the `opcli` CLI — list and search work packages, view them with comments and history, create, update (custom fields by name), change status along the workflow, comment (with images and @mentions that notify), dry-run any write with server-side validation, relate, watch, attach files, build parent/child hierarchies (epics), bulk-update several work packages, set personal reminders, log and review time (or run a timer), record work done after the fact (backfill), schedule meetings with agenda, participants and outcomes (minutes), and manage projects, versions, memberships and notifications; any other API v3 endpoint through `opcli api`. Load whenever the task mentions OpenProject, work packages (WP, #1234), tasks, bugs, epics, milestones, timesheets, time entries, "imputar horas", "apuntar horas", reminders, OpenProject meetings, agendas or minutes ("acta", "orden del día"), or turning notes into OpenProject work. Use INSTEAD of calling the OpenProject API by hand.
+description: Read and change work in an OpenProject instance from the shell with the `opcli` CLI — list and search work packages, view them with comments and history, create, update (custom fields by name), change status along the workflow, comment (with images and @mentions that notify), dry-run any write with server-side validation, relate, watch, attach files, build parent/child hierarchies (epics), export them as Markdown files with frontmatter, bulk-update several work packages, set personal reminders, log and review time (or run a timer), record work done after the fact (backfill), schedule meetings with agenda, participants and outcomes (minutes), and manage projects, versions, memberships and notifications; any other API v3 endpoint through `opcli api`. Load whenever the task mentions OpenProject, work packages (WP, #1234), tasks, bugs, epics, milestones, timesheets, time entries, "imputar horas", "apuntar horas", reminders, OpenProject meetings, agendas or minutes ("acta", "orden del día"), or turning notes into OpenProject work. Use INSTEAD of calling the OpenProject API by hand.
 ---
 
 # opcli — OpenProject from the shell
@@ -50,6 +50,7 @@ are UTC in JSON; text output shows them in local time, to the minute.
 | `wp delete`, `time delete`, `notification read`, … | `{ok: true, message}` |
 | `wp flow` | `{project, from, to, startStatuses, throughput, weekly, cycleTime, leadTime, statuses, workPackages}` (see Flow) |
 | `wp backfill` | plan or result: `workPackage`, `startDate`, `dueDate`, `totalHours`, `days[]` (`date`, `hours`, `timeEntryId`), `comment` |
+| `wp export --dir` | `{dir, count, created, updated, unchanged, renamed: [{id, from, to}], gone: [ids], downloaded, files: [{id, file, status}]}`; without `--dir`: `{id, markdown}` (see Export) |
 
 Records are flattened from HAL: a link becomes its title plus an id
 (`"status": "In progress", "statusId": 7`); Markdown fields are plain strings;
@@ -203,6 +204,69 @@ statuses default to the `doing` ones; `--start-status` picks others. Closed
 without a start status: throughput only. Statuses are read from each work
 package's activities whatever the user's language. `--list` lists the work
 packages in text output.
+
+### Export to Markdown files
+
+```sh
+opcli wp export 42                                          # one WP to stdout
+opcli wp export -p demo-project --status all --dir notes/   # one file per WP
+opcli wp export -p programme --subprojects --status all --dir wp --name id --links wikilink
+opcli wp export -p demo-project --dir wp --map wp-map.yaml --set "team=Backend"
+opcli wp export -p demo-project --dir wp --comments 5 --exclude-comment 1234
+opcli wp export -p demo-project --dir wp --attachments all   # every attachment, locally
+opcli wp export -p demo-project --dir wp -o json | jq '.gone'
+```
+
+`wp export` writes work packages as Markdown: YAML frontmatter with their
+fields, the description as the body and, with `--comments N`, the last N
+comments (`-1` = all; one request per work package; `--exclude-comment`
+skips activity ids, e.g. a comment that carries a secret). It takes the
+filters of `wp list` or ids, and exports every match (`--max 0` by default),
+open ones unless `--status` says otherwise; ids alone imply any status and
+project.
+
+- `--dir` writes `<id>-<subject>.md`, or `<id>.md` with `--name id`. A
+  work package whose subject changed has its file **renamed**, not
+  duplicated; an unchanged one is not rewritten. Without `--dir`, exactly
+  one work package goes to stdout.
+- **Nothing is deleted.** `DIR/.export.json` records the filters, the name
+  mode and `{id, file, updatedAt}` per work package; `gone` in the result
+  lists the work packages of the previous export this one left out (closed,
+  moved, deleted). Deal with their files yourself.
+- Frontmatter types: ids and numbers are numbers, dates `YYYY-MM-DD`,
+  `createdAt`/`updatedAt` local `YYYY-MM-DDTHH:MM` (OpenProject time zone),
+  durations hours as numbers, `version` (not `targetVersions`), lists as
+  YAML lists; empty fields are left out. Default fields: `id subject type
+  status statusIsClosed priority project assignee responsible author version
+  parent startDate dueDate estimatedTime remainingTime spentTime
+  percentageDone storyPoints createdAt updatedAt url customFields` (custom
+  fields nested by name).
+- `--map FILE` picks, orders and renames fields and flattens custom fields;
+  `set:` and `--set KEY=VALUE` add constants (numbers and booleans stay so):
+
+  ```yaml
+  set: {kind: wp, generated: true}
+  fields:
+    id: id
+    subject: title
+    parent: parent
+    customFields.Customer: customer
+  ```
+
+- `--links wikilink` writes `parent` as `"[[<parent's file name>]]"`.
+- The body is clean Markdown: the HTML the editor stores (tables, `<br>`,
+  `<p>`, `<strong>`, links, images, `<details>`) is converted (tables to GFM,
+  a `<details>` summary to a bold line), except inside code; mentions become
+  `@Name`.
+- **Attachments** (`--attachments`, with `--dir`): `images` (default)
+  downloads the attachments the description and comments show into
+  `DIR/attachments/<id>-<name>` and links them relatively; `all` also
+  downloads every attachment of each work package and lists them under an
+  Attachments section; `none` leaves server links (they need a session).
+  Files already there with the same size are not downloaded again; one that
+  fails stays a server link, with a warning on stderr. They are the
+  customer's files: mind where `DIR` is.
+- One way only: editing the files changes nothing in OpenProject.
 
 ## Markdown, images and files
 

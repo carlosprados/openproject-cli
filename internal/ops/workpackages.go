@@ -122,159 +122,169 @@ broken) is re-read by id and the loss, if any, reported on stderr.`,
 	},
 	Columns: wpColumns,
 	Run: func(ctx context.Context, e *Env, a Args) (any, error) {
-		if qid := a.Int("query_id"); qid > 0 {
-			return e.runSavedQuery(ctx, qid, a)
-		}
-		f := NewFilters()
-		project := a.String("project")
-		projectID := 0
-		if !strings.EqualFold(project, "all") && (project != "" || e.DefaultProject != "") {
-			var err error
-			if projectID, err = e.ProjectID(ctx, project); err != nil {
-				return nil, err
-			}
-			scope, err := e.projectScope(ctx, projectID, a.Bool("subprojects"))
-			if err != nil {
-				return nil, err
-			}
-			f = f.Add("project", "=", scope...)
-		} else if a.Bool("subprojects") {
-			return nil, errSubprojectsNeedProject
-		}
-
-		closedFrom, err := ParseDate(a.String("closed_after"))
-		if err != nil {
-			return nil, err
-		}
-		closedTo, err := ParseDate(a.String("closed_before"))
-		if err != nil {
-			return nil, err
-		}
-		byClose := closedFrom != "" || closedTo != ""
-		if byClose && a.Int("page") > 0 {
-			return nil, fmt.Errorf("--page cannot be combined with --closed-after/--closed-before")
-		}
-		switch st := strings.ToLower(a.String("status")); st {
-		case "", "open":
-			if byClose {
-				f = f.Add("status", "c")
-				break
-			}
-			f = f.Add("status", "o")
-		case "closed":
-			f = f.Add("status", "c")
-		case "all", "*":
-		default:
-			ids, err := e.resolveMany(ctx, a.Strings("status"), e.StatusID)
-			if err != nil {
-				return nil, err
-			}
-			f = f.Add("status", "=", ids...)
-		}
-		if a.Has("type") {
-			ids, err := e.resolveMany(ctx, a.Strings("type"), e.TypeID)
-			if err != nil {
-				return nil, err
-			}
-			f = f.Add("type", "=", ids...)
-		}
-		if a.Has("priority") {
-			ids, err := e.resolveMany(ctx, a.Strings("priority"), e.PriorityID)
-			if err != nil {
-				return nil, err
-			}
-			f = f.Add("priority", "=", ids...)
-		}
-		for _, field := range []string{"assignee", "author", "responsible"} {
-			if !a.Has(field) {
-				continue
-			}
-			var err error
-			if f, err = e.userFilter(ctx, f, field, a.String(field)); err != nil {
-				return nil, err
-			}
-		}
-		if a.Has("version") {
-			vid, err := e.VersionID(ctx, projectID, a.String("version"))
-			if err != nil {
-				return nil, err
-			}
-			f = f.Add("targetVersion", "=", vid)
-		}
-		if a.Has("parent") {
-			pid, err := WorkPackageID(a.String("parent"))
-			if err != nil {
-				return nil, err
-			}
-			f = f.Add("parent", "=", pid)
-		}
-		if s := a.String("search"); s != "" {
-			f = f.Add("search", "**", s)
-		}
-		// A work package closed on D was last updated on D or later.
-		if f, err = dateFilter(f, "updatedAt", later(a.String("updated_after"), closedFrom), a.String("updated_before")); err != nil {
-			return nil, err
-		}
-		if f, err = dateFilter(f, "createdAt", a.String("created_after"), a.String("created_before")); err != nil {
-			return nil, err
-		}
-		if f, err = dateFilter(f, "dueDate", a.String("due_after"), a.String("due_before")); err != nil {
-			return nil, err
-		}
-		if f, err = e.fieldFilters(ctx, f, rawStrings(a["field"]), projectID); err != nil {
-			return nil, err
-		}
-		if f, err = f.Merge(a.String("filter")); err != nil {
-			return nil, err
-		}
-		la := a
-		if byClose {
-			la = Args{"max": 0}
-		}
-		// Offset paging over a live server loses one element per work
-		// package updated meanwhile when sorted by updatedAt (it jumps to an
-		// already-read page). A full read pages in creation order, which
-		// updates do not change, and sorts locally when the sort keys allow
-		// it.
-		fullRead := la.Int("max") <= 0 && la.Int("page") <= 0
-		sortSpec := a.String("sort")
-		sortLocally := fullRead && locallySortable(sortSpec)
-		q := url.Values{"filters": {f.JSON()}}
-		if sortLocally {
-			q.Set("sortBy", stableSort)
-		} else if sortSpec != "" {
-			sb, err := sortBy(sortSpec)
-			if err != nil {
-				return nil, err
-			}
-			q.Set("sortBy", sb)
-		}
-		l, err := e.listWith(ctx, "/work_packages", q, la, e.wpPageFallback("/work_packages"))
-		if err != nil {
-			if strings.Contains(err.Error(), "filter does not exist") && a.Has("field") {
-				return nil, fmt.Errorf("%w: OpenProject cannot filter by this field (user and version custom fields are not filterable); filter by another field and check the value with jq", err)
-			}
-			return nil, err
-		}
-		if fullRead && l.Count < l.Total {
-			e.warnf("read %d of %d work packages: the collection changed while paging (deleted work packages, or a sort other than id, updatedAt, createdAt, startDate, dueDate, subject); run again if the count matters", l.Count, l.Total)
-		}
-		if sortLocally {
-			sortWPs(l.Items, sortSpec)
-		}
-		e.decorateWPs(ctx, l.Items)
-		if byClose {
-			var kept []map[string]any
-			for _, h := range e.closedBetween(ctx, l.Items, closedFrom, closedTo) {
-				kept = append(kept, h.WP)
-			}
-			if max := a.Int("max"); max > 0 && len(kept) > max {
-				return &List{Total: len(kept), Count: max, Items: kept[:max]}, nil
-			}
-			l = NewList(kept, len(kept))
-		}
-		return l, nil
+		return e.listWorkPackages(ctx, a, false)
 	},
+}
+
+// listWorkPackages runs the wp list filters; withDescription keeps the
+// description that listings drop (wp export).
+func (e *Env) listWorkPackages(ctx context.Context, a Args, withDescription bool) (*List, error) {
+	if qid := a.Int("query_id"); qid > 0 {
+		return e.runSavedQuery(ctx, qid, a)
+	}
+	f := NewFilters()
+	project := a.String("project")
+	projectID := 0
+	if !strings.EqualFold(project, "all") && (project != "" || e.DefaultProject != "") {
+		var err error
+		if projectID, err = e.ProjectID(ctx, project); err != nil {
+			return nil, err
+		}
+		scope, err := e.projectScope(ctx, projectID, a.Bool("subprojects"))
+		if err != nil {
+			return nil, err
+		}
+		f = f.Add("project", "=", scope...)
+	} else if a.Bool("subprojects") {
+		return nil, errSubprojectsNeedProject
+	}
+
+	closedFrom, err := ParseDate(a.String("closed_after"))
+	if err != nil {
+		return nil, err
+	}
+	closedTo, err := ParseDate(a.String("closed_before"))
+	if err != nil {
+		return nil, err
+	}
+	byClose := closedFrom != "" || closedTo != ""
+	if byClose && a.Int("page") > 0 {
+		return nil, fmt.Errorf("--page cannot be combined with --closed-after/--closed-before")
+	}
+	switch st := strings.ToLower(a.String("status")); st {
+	case "", "open":
+		if byClose {
+			f = f.Add("status", "c")
+			break
+		}
+		f = f.Add("status", "o")
+	case "closed":
+		f = f.Add("status", "c")
+	case "all", "*":
+	default:
+		ids, err := e.resolveMany(ctx, a.Strings("status"), e.StatusID)
+		if err != nil {
+			return nil, err
+		}
+		f = f.Add("status", "=", ids...)
+	}
+	if a.Has("type") {
+		ids, err := e.resolveMany(ctx, a.Strings("type"), e.TypeID)
+		if err != nil {
+			return nil, err
+		}
+		f = f.Add("type", "=", ids...)
+	}
+	if a.Has("priority") {
+		ids, err := e.resolveMany(ctx, a.Strings("priority"), e.PriorityID)
+		if err != nil {
+			return nil, err
+		}
+		f = f.Add("priority", "=", ids...)
+	}
+	for _, field := range []string{"assignee", "author", "responsible"} {
+		if !a.Has(field) {
+			continue
+		}
+		var err error
+		if f, err = e.userFilter(ctx, f, field, a.String(field)); err != nil {
+			return nil, err
+		}
+	}
+	if a.Has("version") {
+		vid, err := e.VersionID(ctx, projectID, a.String("version"))
+		if err != nil {
+			return nil, err
+		}
+		f = f.Add("targetVersion", "=", vid)
+	}
+	if a.Has("parent") {
+		pid, err := WorkPackageID(a.String("parent"))
+		if err != nil {
+			return nil, err
+		}
+		f = f.Add("parent", "=", pid)
+	}
+	if s := a.String("search"); s != "" {
+		f = f.Add("search", "**", s)
+	}
+	// A work package closed on D was last updated on D or later.
+	if f, err = dateFilter(f, "updatedAt", later(a.String("updated_after"), closedFrom), a.String("updated_before")); err != nil {
+		return nil, err
+	}
+	if f, err = dateFilter(f, "createdAt", a.String("created_after"), a.String("created_before")); err != nil {
+		return nil, err
+	}
+	if f, err = dateFilter(f, "dueDate", a.String("due_after"), a.String("due_before")); err != nil {
+		return nil, err
+	}
+	if f, err = e.fieldFilters(ctx, f, rawStrings(a["field"]), projectID); err != nil {
+		return nil, err
+	}
+	if f, err = f.Merge(a.String("filter")); err != nil {
+		return nil, err
+	}
+	la := a
+	if byClose {
+		la = Args{"max": 0}
+	}
+	// Offset paging over a live server loses one element per work
+	// package updated meanwhile when sorted by updatedAt (it jumps to an
+	// already-read page). A full read pages in creation order, which
+	// updates do not change, and sorts locally when the sort keys allow
+	// it.
+	fullRead := la.Int("max") <= 0 && la.Int("page") <= 0
+	sortSpec := a.String("sort")
+	sortLocally := fullRead && locallySortable(sortSpec)
+	q := url.Values{"filters": {f.JSON()}}
+	if sortLocally {
+		q.Set("sortBy", stableSort)
+	} else if sortSpec != "" {
+		sb, err := sortBy(sortSpec)
+		if err != nil {
+			return nil, err
+		}
+		q.Set("sortBy", sb)
+	}
+	l, err := e.listWith(ctx, "/work_packages", q, la, e.wpPageFallback("/work_packages"))
+	if err != nil {
+		if strings.Contains(err.Error(), "filter does not exist") && a.Has("field") {
+			return nil, fmt.Errorf("%w: OpenProject cannot filter by this field (user and version custom fields are not filterable); filter by another field and check the value with jq", err)
+		}
+		return nil, err
+	}
+	if fullRead && l.Count < l.Total {
+		e.warnf("read %d of %d work packages: the collection changed while paging (deleted work packages, or a sort other than id, updatedAt, createdAt, startDate, dueDate, subject); run again if the count matters", l.Count, l.Total)
+	}
+	if sortLocally {
+		sortWPs(l.Items, sortSpec)
+	}
+	if withDescription {
+		e.decorateWPsKeeping(ctx, l.Items, "description")
+	} else {
+		e.decorateWPs(ctx, l.Items)
+	}
+	if byClose {
+		var kept []map[string]any
+		for _, h := range e.closedBetween(ctx, l.Items, closedFrom, closedTo) {
+			kept = append(kept, h.WP)
+		}
+		if max := a.Int("max"); max > 0 && len(kept) > max {
+			return &List{Total: len(kept), Count: max, Items: kept[:max]}, nil
+		}
+		l = NewList(kept, len(kept))
+	}
+	return l, nil
 }
 
 func (e *Env) runSavedQuery(ctx context.Context, id int, a Args) (*List, error) {
@@ -429,9 +439,25 @@ var wpListNoise = map[string]bool{
 // decorateWPs adds the browser URL, names custom fields and drops empty and
 // noisy fields.
 func (e *Env) decorateWPs(ctx context.Context, items []map[string]any) {
+	e.decorateWPsKeeping(ctx, items)
+}
+
+// decorateWPsKeeping is decorateWPs keeping some of the noisy fields.
+func (e *Env) decorateWPsKeeping(ctx context.Context, items []map[string]any, keep ...string) {
 	for _, it := range items {
+		kept := map[string]any{}
+		for _, k := range keep {
+			if v, ok := it[k]; ok {
+				kept[k] = v
+			}
+		}
 		e.decorateWP(ctx, it)
 		compactWP(it)
+		for k, v := range kept {
+			if v != nil && v != "" {
+				it[k] = v
+			}
+		}
 	}
 }
 
