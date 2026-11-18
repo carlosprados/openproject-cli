@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -153,5 +154,70 @@ func TestRunSavedQueryManualOrder(t *testing.T) {
 	l, err = env.runSavedQuery(context.Background(), 5, Args{"max": 2})
 	if err != nil || !reflect.DeepEqual(ids(l), []int{1200, 7}) {
 		t.Fatalf("max 2: %v %v", ids(l), err)
+	}
+}
+
+// Lists are always present in board get: an empty column has "cards": [],
+// a board without filters "filters": []; write results carry no cards.
+func TestBoardGetEmptyLists(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/hal+json")
+		switch r.URL.Path {
+		case "/api/v3/grids/9":
+			_, _ = w.Write([]byte(`{"id":9,"name":"Kanban","options":{"type":"action","attribute":"status"},
+				"_links":{"scope":{"href":"/projects/DEMO/boards"}},
+				"widgets":[
+				  {"id":1,"identifier":"work_package_query","startColumn":1,"options":{"queryId":11,"filters":[{"status":{"operator":"=","values":["1"]}}]}},
+				  {"id":2,"identifier":"work_package_query","startColumn":2,"options":{"queryId":12,"filters":[{"status":{"operator":"=","values":["7"]}}]}}]}`))
+		case "/api/v3/queries":
+			_, _ = w.Write([]byte(`{"total":2,"count":2,"_embedded":{"elements":[{"id":11,"name":"New"},{"id":12,"name":"In progress"}]}}`))
+		case "/api/v3/queries/11/order", "/api/v3/queries/12/order":
+			_, _ = w.Write([]byte(`{}`))
+		case "/api/v3/projects/DEMO":
+			_, _ = w.Write([]byte(`{"id":4,"identifier":"DEMO"}`))
+		case "/api/v3/projects/4/work_packages":
+			if strings.Contains(r.URL.Query().Get("filters"), `"7"`) {
+				_, _ = w.Write([]byte(`{"total":0,"count":0,"_embedded":{"elements":[]}}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"total":1,"count":1,"_embedded":{"elements":[{"id":42,"subject":"S"}]}}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	env := NewEnv(client.New(srv.URL, "k"), "")
+	ctx := context.Background()
+	asJSON := func(v any) string {
+		b, err := json.Marshal(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+
+	v, err := boardGet.Run(ctx, env, Args{"board": "9", "max": 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := asJSON(v)
+	for _, want := range []string{`"filters":[]`, `"total":0,"cards":[]`, `"total":1,"cards":[{"id":42,"subject":"S"}]`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("board get: missing %s in %s", want, got)
+		}
+	}
+	v, err = boardGet.Run(ctx, env, Args{"board": "9", "max": 50, "counts": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := asJSON(v); strings.Count(got, `"cards":[]`) != 2 {
+		t.Errorf("--counts: want two empty card lists, got %s", got)
+	}
+	v, err = env.afterWrite(ctx, 9)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := asJSON(v); strings.Contains(got, `"cards"`) || strings.Contains(got, `"total"`) || !strings.Contains(got, `"filters":[]`) {
+		t.Errorf("write result: %s", got)
 	}
 }

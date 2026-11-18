@@ -54,7 +54,7 @@ are UTC in JSON; text output shows them in local time, to the minute.
 | `wp export --dir` | `{dir, count, created, updated, unchanged, renamed: [{id, from, to}], gone: [ids], downloaded, files: [{id, file, status}]}`; without `--dir`: `{id, markdown}` (see Export) |
 | `project snapshot` | `{root, projects: [{id, identifier, name, path, parent?, parentId?, status?, statusExplanation?, description?, active, public, createdAt, updatedAt, url, versions: [{id, name, status, startDate?, endDate?, sharing, description?, createdAt, updatedAt}]}]}` (see Projects) |
 | `board list` | `{total, count, items: [{id, name, project, kind, attribute?, columns, createdAt, updatedAt, url}]}` |
-| `board get` | `{id, name, project, kind, attribute?, filters?, url, columns: [{position, name, value?, queryId, widgetId, total, cards: [{id, displayId?, subject, type, status, assignee?, priority?, dueDate?, project?, position?}]}]}` (see Boards) |
+| `board get` | `{id, name, project, kind, attribute?, filters, url, columns: [{position, name, value?, queryId, widgetId, total, cards: [{id, displayId?, subject, type, status, assignee?, priority?, dueDate?, project?, position?}]}]}` (see Boards) |
 | `board create`, `board update`, `board column …` | the board as `board get`, without `total` and `cards` |
 | `board card move`, `board card add` | `{wp, board, from?, to, changed?, value?, position?}` |
 
@@ -545,8 +545,9 @@ names work when unambiguous); a column by name or position (1 = leftmost).
 - `board get` lists each column's cards in board order: those placed by hand
   first (`position`), then the rest by id, as the web shows them. Every card
   is read to order it; `--max` (default 50, `0` = all) only caps the list,
-  `total` counts them all. `filters` are board-wide filters, on top of each
-  column's. `project` appears on a card only when it is not the board's.
+  `total` counts them all; with `--counts`, `cards` is `[]`. `cards` and
+  `filters` are always lists, empty when there is nothing. `filters` are
+  board-wide filters, on top of each column's. `project` appears on a card only when it is not the board's.
 - **`board card move`** is dragging a card. In a board by attribute, `--to`
   another column changes the field to the column's value through `wp
   update`, with the same server-side validation: a status the workflow does
