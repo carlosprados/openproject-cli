@@ -152,7 +152,8 @@ opcli time status -o json                                  # is a timer running?
 
 - `wp list` defaults: open work packages, the configured project (else every
   project), 50 results, most recently updated first. `--max 0` fetches all.
-  Flags combine with AND; `--query-id` ignores the other filters.
+  Flags combine with AND; `--query-id` ignores the other filters; a manually
+  sorted query (a board column) keeps its manual order, every page included.
 - Whether `--project X` also returns its subprojects' work packages depends
   on an instance setting ("display subprojects work packages"), so do not
   rely on it. `--subprojects` always includes every project below X, at any

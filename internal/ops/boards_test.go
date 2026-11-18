@@ -1,8 +1,16 @@
 package ops
 
 import (
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
+	"strconv"
+	"strings"
 	"testing"
+
+	"github.com/carlosprados/openproject-cli/internal/client"
 )
 
 func TestPlaceCard(t *testing.T) {
@@ -92,5 +100,58 @@ func TestCardValue(t *testing.T) {
 	}
 	if v := cardValue(wp, boardAttrs["subtasks"]); v != "" {
 		t.Errorf("parent: %q", v)
+	}
+}
+
+// A manually sorted query is served as one forced page by OpenProject; it
+// must be read by id, page after page, and put back in manual order.
+func TestRunSavedQueryManualOrder(t *testing.T) {
+	const n = 1203
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/hal+json")
+		q := r.URL.Query()
+		switch r.URL.Path {
+		case "/api/v3/queries/5/order":
+			_, _ = w.Write([]byte(`{"1200": 0, "7": 5}`))
+		case "/api/v3/queries/5":
+			size, _ := strconv.Atoi(q.Get("pageSize"))
+			off, _ := strconv.Atoi(q.Get("offset"))
+			if q.Get("sortBy") == "" && size != 0 {
+				size, off = 250, 1 // what the server forces on manual queries
+			}
+			var els []string
+			for id := (off-1)*size + 1; id <= min(off*size, n) && size > 0; id++ {
+				els = append(els, fmt.Sprintf(`{"_type":"WorkPackage","id":%d,"subject":"S"}`, id))
+			}
+			fmt.Fprintf(w, `{"_links":{"sortBy":[{"href":"/api/v3/queries/sort_bys/manualSorting-asc"},{"href":"/api/v3/queries/sort_bys/id-asc"}]},
+				"_embedded":{"results":{"total":%d,"count":%d,"_embedded":{"elements":[%s]}}}}`, n, len(els), strings.Join(els, ","))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	env := NewEnv(client.New(srv.URL, "k"), "")
+	ids := func(l *List) []int {
+		var out []int
+		for _, it := range l.Items {
+			out = append(out, intOf(it["id"]))
+		}
+		return out
+	}
+
+	l, err := env.runSavedQuery(context.Background(), 5, Args{"max": 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.Total != n || len(l.Items) != n || !reflect.DeepEqual(ids(l)[:4], []int{1200, 7, 1, 2}) {
+		t.Fatalf("all: total %d, %d items, head %v", l.Total, len(l.Items), ids(l)[:4])
+	}
+	l, err = env.runSavedQuery(context.Background(), 5, Args{"max": 3, "page": 2})
+	if err != nil || !reflect.DeepEqual(ids(l), []int{2, 3, 4}) {
+		t.Fatalf("page 2 of 3: %v %v", ids(l), err)
+	}
+	l, err = env.runSavedQuery(context.Background(), 5, Args{"max": 2})
+	if err != nil || !reflect.DeepEqual(ids(l), []int{1200, 7}) {
+		t.Fatalf("max 2: %v %v", ids(l), err)
 	}
 }
