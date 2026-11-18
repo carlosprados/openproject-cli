@@ -352,18 +352,20 @@ func (e *Env) ProjectID(ctx context.Context, ref string) (int, error) {
 	return id, nil
 }
 
-// workPackageScope adds pid to the work package filters f and returns the
-// collection to read them from. Without subprojects it is a "project ="
-// filter on /work_packages, which follows the instance setting "display
-// subprojects work packages". With subprojects it reads
-// /projects/{pid}/work_packages with a "subprojectId =" filter listing every
+// workPackageScope returns the collection to read pid's work packages from,
+// always /projects/{pid}/work_packages: there a custom field enabled in the
+// project can be filtered, while /work_packages only accepts those "for all
+// projects" ("Cf N filter does not exist"). Without subprojects it follows
+// the instance setting "display subprojects work packages", like a "project
+// =" filter. With subprojects it adds a "subprojectId =" filter listing every
 // project below pid, so the result does not depend on that setting. The
 // listed projects are those whose parent links reach pid (see projectTree):
-// a "project =" filter expands each id through the server's nested set, which
-// can hold projects that are not in the tree the web UI shows.
+// the server's nested set can hold projects that are not in the tree the web
+// UI shows.
 func (e *Env) workPackageScope(ctx context.Context, f Filters, pid int, subprojects bool) (Filters, string, error) {
+	path := fmt.Sprintf("/projects/%d/work_packages", pid)
 	if !subprojects {
-		return f.Add("project", "=", pid), "/work_packages", nil
+		return f, path, nil
 	}
 	anc := NewFilters().Add("ancestor", "=", pid)
 	items, _, err := e.C.Collect(ctx, "/projects", url.Values{"filters": {anc.JSON()}}, 0)
@@ -381,7 +383,6 @@ func (e *Env) workPackageScope(ctx context.Context, f Filters, pid int, subproje
 		}
 	}
 	sort.Ints(ids)
-	path := fmt.Sprintf("/projects/%d/work_packages", pid)
 	if len(ids) == 0 {
 		return f.Add("subprojectId", "!*"), path, nil
 	}

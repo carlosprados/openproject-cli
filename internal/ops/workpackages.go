@@ -258,7 +258,7 @@ func (e *Env) listWorkPackages(ctx context.Context, a Args, withDescription bool
 	l, err := e.listWith(ctx, path, q, la, e.wpPageFallback(path))
 	if err != nil {
 		if strings.Contains(err.Error(), "filter does not exist") && a.Has("field") {
-			return nil, fmt.Errorf("%w: OpenProject cannot filter by this field (user and version custom fields are not filterable); filter by another field and check the value with jq", err)
+			return nil, fmt.Errorf("%w: OpenProject cannot filter by this field here: user and version custom fields are never filterable, other custom fields only if marked 'used as a filter', and without a project (-p all) only those 'for all projects'; filter by another field and check the value with jq", err)
 		}
 		return nil, err
 	}
