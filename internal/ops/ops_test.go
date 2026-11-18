@@ -300,6 +300,26 @@ func TestListWorkPackagesWithSubprojects(t *testing.T) {
 		t.Errorf("filters %s: want %s and no project filter", filters, want)
 	}
 
+	// Without --subprojects it is the project endpoint too: only there can a
+	// custom field that is not "for all projects" be filtered.
+	f.requests = nil
+	if _, err := ByCmd("wp list").Execute(context.Background(), env, Args{"project": "4"}); err != nil {
+		t.Fatal(err)
+	}
+	filters = ""
+	for _, r := range f.requests {
+		if strings.HasPrefix(r, "GET /api/v3/work_packages?") {
+			t.Errorf("a project's list must not read the global collection: %s", r)
+		}
+		if strings.HasPrefix(r, "GET /api/v3/projects/4/work_packages?") {
+			u, _ := url.Parse(strings.TrimPrefix(r, "GET "))
+			filters = u.Query().Get("filters")
+		}
+	}
+	if filters == "" || strings.Contains(filters, `"project"`) || strings.Contains(filters, "subprojectId") {
+		t.Errorf("filters %q: want the project endpoint with neither project nor subprojectId filters", filters)
+	}
+
 	if _, err := ByCmd("wp list").Execute(context.Background(), env, Args{"project": "all", "subprojects": true}); err == nil {
 		t.Error("--subprojects with --project all must fail")
 	}

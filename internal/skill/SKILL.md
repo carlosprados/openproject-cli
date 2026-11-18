@@ -166,7 +166,8 @@ opcli time status -o json                                  # is a timer running?
 - `--field NAME=VALUE` filters by any field by its name, custom fields
   included: text matches by "contains", lists, users and versions by name,
   booleans `yes`/`no`, dates as usual. It needs a project. OpenProject cannot
-  filter by user or version custom fields: filter by something else and check
+  filter by user or version custom fields, nor by custom fields not marked as
+  filters (`Cf N filter does not exist`): filter by something else and check
   `customFields` with `jq`.
 - Date flags take the usual dates (`2026-09-01`, `today`, `week`, `month`,
   `-7d`) and both ends are inclusive. `--due-*` also matches a milestone's
