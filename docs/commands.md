@@ -7,6 +7,18 @@ Generated with `opcli docs`. Global flags: `--config`, `--url`, `--api-key`, `-o
 | `opcli api describe` | read-only | Show parameters, body fields and examples of an endpoint |
 | `opcli api endpoints` | read-only | Search the catalogue of API v3 endpoints |
 | `opcli api request` | **destructive** | Call any API v3 endpoint and print the JSON answer |
+| `opcli board card add` | writes | Put a work package on a list of a free board |
+| `opcli board card move` | writes | Move a card to another column and/or to a place in its column |
+| `opcli board card remove` | writes | Take a work package off a list of a free board (the work package stays) |
+| `opcli board column add` | writes | Add a column: a value of the board's attribute, or a list in a free board |
+| `opcli board column move` | writes | Move a column to another position |
+| `opcli board column remove` | **destructive** | Remove a column and its hidden query (the work packages stay) |
+| `opcli board column rename` | writes | Rename a column (its hidden query) |
+| `opcli board create` | writes | Create a board: by an attribute (status, assignee, version, ...) or free |
+| `opcli board delete` | **destructive** | Delete a board and its column queries (irreversible; the work packages stay) |
+| `opcli board get` | read-only | Show a board: its columns, left to right, with their cards in board order |
+| `opcli board list` | read-only | List the boards of a project (or of every project) |
+| `opcli board update` | writes | Rename a board |
 | `opcli meeting agenda add` | writes | Add an agenda item (free text or a work package) to a meeting |
 | `opcli meeting agenda delete` | **destructive** | Remove an agenda item |
 | `opcli meeting agenda update` | writes | Change an agenda item |
@@ -149,6 +161,279 @@ Effect: **destructive**
   opcli api request POST /api/v3/render/markdown --body '"**bold**"'
   opcli api request PATCH work_packages/42 --body '{"lockVersion":3,"subject":"New"}'
   opcli api request POST news --body-file news.json
+```
+
+## opcli board card add
+
+Put a work package on a list of a free board
+
+Effect: writes
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Work package id |
+| `--board` | string |  | **required** Board id or name (see 'opcli board list') |
+| `--project` | string |  | Project of the board, to find it by name (default: configured project, else every project) |
+| `--column` | string |  | **required** Column name or position (1 = leftmost) |
+| `--top` | bool |  | Put it first in the column |
+| `--bottom` | bool |  | Put it last in the column |
+| `--before` | string |  | Put it just above this work package (id) |
+| `--after` | string |  | Put it just below this work package (id) |
+
+```sh
+  opcli board card add 42 --board "Ideas" --column "Next"
+  opcli board card add 42 -b 12 --column 1 --top
+```
+
+## opcli board card move
+
+Move a card to another column and/or to a place in its column
+
+Drag a card. --to names the target column (default: the one it is in).
+
+In a board by attribute, moving to another column changes the work
+package's field to the column's value (status, assignee, version, project
+or parent), through the same server-side validation as 'wp update': a
+status the workflow does not allow fails listing the allowed ones. Check
+'opcli wp allowed <id> --field status' first.
+
+In a free board, the card leaves its list and joins the target one (pass
+--from when it is in several).
+
+--top, --bottom, --before <id> or --after <id> place it inside the target
+column; without them it lands where the board puts new cards (last, unless
+it was placed by hand before). Reordering inside one column needs one of
+them.
+
+Effect: writes
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Work package id |
+| `--board` | string |  | **required** Board id or name (see 'opcli board list') |
+| `--project` | string |  | Project of the board, to find it by name (default: configured project, else every project) |
+| `--to` | string |  | Target column (name or position; default: its current column) |
+| `--from` | string |  | Free boards: the list it leaves, when it is in several |
+| `--notify` | bool | `true` | Send email notifications for the field change |
+| `--top` | bool |  | Put it first in the column |
+| `--bottom` | bool |  | Put it last in the column |
+| `--before` | string |  | Put it just above this work package (id) |
+| `--after` | string |  | Put it just below this work package (id) |
+
+```sh
+  opcli board card move 42 --board "Kanban" --to "In progress" --top
+  opcli board card move 42 -b 12 --before 57
+  opcli board card move 42 -b "Ideas" --to "Now" --bottom
+  opcli board card move 42 -b "Kanban" --to Closed --notify=false --dry-run
+```
+
+## opcli board card remove
+
+Take a work package off a list of a free board (the work package stays)
+
+Effect: writes
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<id>` (arg) | string |  | **required** Work package id |
+| `--board` | string |  | **required** Board id or name (see 'opcli board list') |
+| `--project` | string |  | Project of the board, to find it by name (default: configured project, else every project) |
+| `--column` | string |  | The list to take it off (default: every list it is in) |
+
+```sh
+  opcli board card remove 42 --board "Ideas"
+  opcli board card remove 42 -b 12 --column "Later"
+```
+
+## opcli board column add
+
+Add a column: a value of the board's attribute, or a list in a free board
+
+Add a column to a board. In a board by attribute, --value is the value the
+column shows (a status, a user, a version, a subproject or a parent work
+package, by name or id), and the column takes its name. In a free board,
+--name names the new list. A hidden query is created for it, as in the web;
+if the board cannot be saved, the query is deleted again.
+
+Effect: writes
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<board>` (arg) | string |  | **required** Board id or name (see 'opcli board list') |
+| `--project` | string |  | Project of the board, to find it by name (default: configured project, else every project) |
+| `--value` | string |  | Attribute value of the column (boards by attribute) |
+| `--name` | string |  | Column name (free boards; elsewhere it overrides the value's name) |
+| `--position` | int |  | Place it here, 1 = leftmost (default: last) |
+
+```sh
+  opcli board column add "Kanban" --value "On hold" --position 3
+  opcli board column add 12 --value jane
+  opcli board column add "Ideas" --name "Someday"
+```
+
+## opcli board column move
+
+Move a column to another position
+
+Effect: writes
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<board>` (arg) | string |  | **required** Board id or name (see 'opcli board list') |
+| `--project` | string |  | Project of the board, to find it by name (default: configured project, else every project) |
+| `--column` | string |  | **required** Column name or position (1 = leftmost) |
+| `--position` | int |  | **required** New position, 1 = leftmost |
+
+```sh
+  opcli board column move "Kanban" --column "Closed" --position 5
+  opcli board column move 12 --column 1 --position 2
+```
+
+## opcli board column remove
+
+Remove a column and its hidden query (the work packages stay)
+
+Remove a column from a board and delete its hidden query, so its manual
+card order is lost. The work packages are not touched: in a board by
+attribute they keep their value; in a free board they leave that list.
+
+Effect: **destructive**
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<board>` (arg) | string |  | **required** Board id or name (see 'opcli board list') |
+| `--project` | string |  | Project of the board, to find it by name (default: configured project, else every project) |
+| `--column` | string |  | **required** Column name or position (1 = leftmost) |
+
+```sh
+  opcli board column remove "Kanban" --column "On hold" --dry-run
+  opcli board column remove 12 --column 4 --yes
+```
+
+## opcli board column rename
+
+Rename a column (its hidden query)
+
+Effect: writes
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<board>` (arg) | string |  | **required** Board id or name (see 'opcli board list') |
+| `--project` | string |  | Project of the board, to find it by name (default: configured project, else every project) |
+| `--column` | string |  | **required** Column name or position (1 = leftmost) |
+| `--name` | string |  | **required** New name |
+
+```sh
+  opcli board column rename "Ideas" --column "Later" --name "Someday"
+```
+
+## opcli board create
+
+Create a board: by an attribute (status, assignee, version, ...) or free
+
+Create a board in a project. --attribute picks its kind:
+
+  status, assignee, version, subproject, subtasks: one column per value of
+    that field; moving a card between columns changes the field;
+  free: columns are lists you fill with 'board card add'.
+
+--columns gives the initial columns, left to right: values of the attribute
+(status names, users, version names, subprojects, parent work packages) or,
+in a free board, list names. Without it you get what the web creates: the
+default status, the open versions of the project, one free list, or none.
+Each column gets a hidden query of its own, as in the web.
+
+Effect: writes
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--project` | string |  | Project id, identifier or name (default: configured project) |
+| `--name` | string |  | **required** Board name |
+| `--attribute` | string |  | **required** Kind of board: status, assignee, version, subproject, subtasks, free |
+| `--columns` | list |  | Initial columns, comma-separated: attribute values, or list names in a free board |
+
+```sh
+  opcli board create -p demo-project --name "Kanban" --attribute status --columns "New,In progress,Closed"
+  opcli board create -p demo-project --name "Team" --attribute assignee --columns "jane,john"
+  opcli board create -p demo-project --name "Releases" --attribute version
+  opcli board create -p demo-project --name "Ideas" --attribute free --columns "Later,Next,Now"
+  opcli board create -p demo-project --name "Epics" --attribute subtasks --columns "42,57" --dry-run
+```
+
+## opcli board delete
+
+Delete a board and its column queries (irreversible; the work packages stay)
+
+Effect: **destructive**
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<board>` (arg) | string |  | **required** Board id or name (see 'opcli board list') |
+| `--project` | string |  | Project of the board, to find it by name (default: configured project, else every project) |
+
+```sh
+  opcli board delete 12 --dry-run
+  opcli board delete "Old kanban" -p demo-project --yes
+```
+
+## opcli board get
+
+Show a board: its columns, left to right, with their cards in board order
+
+Show a board as the web draws it: columns left to right and, in each, the
+cards in their manual order (cards never placed by hand go last, by id).
+Every card of a column is read to order it; --max only caps how many are
+listed (total counts them all). --counts lists no cards.
+
+Cards are compact: id, displayId, subject, type, status, assignee, priority,
+dueDate, position (when placed by hand) and project (only when it is not the
+board's, e.g. a subproject's).
+
+Effect: read-only
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<board>` (arg) | string |  | **required** Board id or name (see 'opcli board list') |
+| `--project` | string |  | Project of the board, to find it by name (default: configured project, else every project) |
+| `--column` | string |  | Only this column (name or position) |
+| `--max` | int | `50` | Maximum number of results (0 = all) |
+| `--counts` | bool |  | Only the number of cards per column |
+
+```sh
+  opcli board get "Kanban" -p demo-project
+  opcli board get 12 --column "In progress" --max 0 -o json
+  opcli board get 12 --counts
+```
+
+## opcli board list
+
+List the boards of a project (or of every project)
+
+Effect: read-only
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--project` | string |  | Project id, identifier or name; 'all' for every project (default: configured project) |
+
+```sh
+  opcli board list -p demo-project
+  opcli board list --project all -o json
+```
+
+## opcli board update
+
+Rename a board
+
+Effect: writes
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<board>` (arg) | string |  | **required** Board id or name (see 'opcli board list') |
+| `--project` | string |  | Project of the board, to find it by name (default: configured project, else every project) |
+| `--name` | string |  | **required** New name |
+
+```sh
+  opcli board update 12 --name "Team kanban"
 ```
 
 ## opcli meeting agenda add
