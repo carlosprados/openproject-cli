@@ -443,20 +443,20 @@ type boardView struct {
 	Project   string       `json:"project"`
 	Kind      string       `json:"kind"`
 	Attribute string       `json:"attribute,omitempty"`
-	Filters   []any        `json:"filters,omitempty"`
+	Filters   []any        `json:"filters"`
 	URL       string       `json:"url"`
 	Columns   []columnView `json:"columns"`
 	cards     bool
 }
 
 type columnView struct {
-	Position int              `json:"position"`
-	Name     string           `json:"name"`
-	Value    string           `json:"value,omitempty"`
-	QueryID  int              `json:"queryId"`
-	WidgetID int              `json:"widgetId"`
-	Total    *int             `json:"total,omitempty"`
-	Cards    []map[string]any `json:"cards,omitempty"`
+	Position int               `json:"position"`
+	Name     string            `json:"name"`
+	Value    string            `json:"value,omitempty"`
+	QueryID  int               `json:"queryId"`
+	WidgetID int               `json:"widgetId"`
+	Total    *int              `json:"total,omitempty"`
+	Cards    *[]map[string]any `json:"cards,omitempty"` // nil: a write result, no cards read
 }
 
 var cardFields = []string{"id", "displayId", "subject", "type", "status", "assignee", "priority", "dueDate", "project"}
@@ -465,6 +465,9 @@ func (e *Env) boardURL(b *board) string { return e.C.WebURL(fmt.Sprintf("%s/%d",
 
 func (e *Env) viewBoard(b *board) *boardView {
 	v := &boardView{ID: b.ID, Name: b.Name, Project: b.Project, Kind: b.Kind, Filters: b.Filters, URL: e.boardURL(b), Columns: []columnView{}}
+	if v.Filters == nil {
+		v.Filters = []any{}
+	}
 	if b.Kind == "action" {
 		v.Attribute = b.Attribute
 	}
@@ -511,7 +514,11 @@ func renderBoard(w io.Writer, v any) error {
 			total = fmt.Sprintf(" (%d)", *c.Total)
 		}
 		fmt.Fprintf(w, "\n%d. %s%s\n", c.Position, c.Name, total)
-		for _, cd := range c.Cards {
+		var cards []map[string]any
+		if c.Cards != nil {
+			cards = *c.Cards
+		}
+		for _, cd := range cards {
 			ref := "#" + fmt.Sprint(cd["id"])
 			if d, ok := cd["displayId"]; ok {
 				ref += " " + fmt.Sprint(d)
@@ -528,8 +535,8 @@ func renderBoard(w io.Writer, v any) error {
 			}
 			fmt.Fprintf(w, "   %-16s %s%s\n", ref, hal.String(cd["subject"]), suffix)
 		}
-		if c.Total != nil && len(c.Cards) < *c.Total && b.cards {
-			fmt.Fprintf(w, "   … %d more\n", *c.Total-len(c.Cards))
+		if c.Total != nil && len(cards) < *c.Total && b.cards {
+			fmt.Fprintf(w, "   … %d more\n", *c.Total-len(cards))
 		}
 	}
 	return nil
@@ -620,17 +627,17 @@ board's, e.g. a subproject's).`,
 				return
 			}
 			v.Columns[i].Total = &total
+			out := []map[string]any{}
+			v.Columns[i].Cards = &out
 			if a.Bool("counts") {
 				return
 			}
 			if max > 0 && len(cards) > max {
 				cards = cards[:max]
 			}
-			out := make([]map[string]any, len(cards))
-			for j, wp := range cards {
-				out[j] = card(wp, pos, strconv.Itoa(pid))
+			for _, wp := range cards {
+				out = append(out, card(wp, pos, strconv.Itoa(pid)))
 			}
-			v.Columns[i].Cards = out
 		})
 		if err := errors.Join(errs...); err != nil {
 			return nil, err
