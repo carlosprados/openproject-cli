@@ -47,6 +47,11 @@ Tested against OpenProject 17.8 (API v3).
   uploaded as an attachment and rendered; `--attach` sends files along with a
   create or update (on create they are claimed atomically by the new work
   package).
+- **Boards**: list and view kanban boards with their cards in board order;
+  create boards by status, assignee, version, subproject or parent, or free
+  ones; add, remove, move and rename columns; drag cards between columns
+  (changing the field, validated against the workflow) and place them in a
+  column's manual order.
 - **Backfill**: `opcli wp backfill` records work done without planning or
   logging — real dates, hours spread over working days, an audit comment.
 - **Time tracking**: log, list with totals and grouping (day/project/wp/activity/user), update, delete,
@@ -118,6 +123,8 @@ opcli wp list --status all --updated-after -3d
 opcli wp flow -p website --since 12w             # throughput and cycle time
 opcli wp changes -p website --since 7d           # comments and field changes, oldest first
 opcli wp export -p website --status all --dir notes/   # one Markdown file per work package
+opcli board get Kanban -p website                 # columns and cards, in board order
+opcli board card move 42 --board Kanban --to "In progress" --top
 opcli wp get 42 --activities
 opcli wp allowed 42 --field status                 # valid transitions right now
 opcli wp fields -p website --type Bug              # fields, custom ones included, and their values

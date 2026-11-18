@@ -1,6 +1,6 @@
 ---
 name: opcli
-description: Read and change work in an OpenProject instance from the shell with the `opcli` CLI — list and search work packages, view them with comments and history, create, update (custom fields by name), change status along the workflow, comment (with images and @mentions that notify), dry-run any write with server-side validation, relate, watch, attach files, build parent/child hierarchies (epics), export them as Markdown files with frontmatter, bulk-update several work packages, set personal reminders, log and review time (or run a timer), record work done after the fact (backfill), schedule meetings with agenda, participants and outcomes (minutes), and manage projects, versions, memberships and notifications; any other API v3 endpoint through `opcli api`. Load whenever the task mentions OpenProject, work packages (WP, #1234), tasks, bugs, epics, milestones, timesheets, time entries, "imputar horas", "apuntar horas", reminders, OpenProject meetings, agendas or minutes ("acta", "orden del día"), or turning notes into OpenProject work. Use INSTEAD of calling the OpenProject API by hand.
+description: Read and change work in an OpenProject instance from the shell with the `opcli` CLI — list and search work packages, view them with comments and history, create, update (custom fields by name), change status along the workflow, comment (with images and @mentions that notify), dry-run any write with server-side validation, relate, watch, attach files, build parent/child hierarchies (epics), export them as Markdown files with frontmatter, bulk-update several work packages, set personal reminders, log and review time (or run a timer), record work done after the fact (backfill), schedule meetings with agenda, participants and outcomes (minutes), view and arrange kanban boards (columns, moving and ordering cards), and manage projects, versions, memberships and notifications; any other API v3 endpoint through `opcli api`. Load whenever the task mentions OpenProject, work packages (WP, #1234), tasks, bugs, epics, milestones, timesheets, time entries, "imputar horas", "apuntar horas", reminders, OpenProject meetings, agendas or minutes ("acta", "orden del día"), OpenProject boards or kanban ("tablero", columns, cards), or turning notes into OpenProject work. Use INSTEAD of calling the OpenProject API by hand.
 ---
 
 # opcli — OpenProject from the shell
@@ -53,6 +53,10 @@ are UTC in JSON; text output shows them in local time, to the minute.
 | `wp backfill` | plan or result: `workPackage`, `startDate`, `dueDate`, `totalHours`, `days[]` (`date`, `hours`, `timeEntryId`), `comment` |
 | `wp export --dir` | `{dir, count, created, updated, unchanged, renamed: [{id, from, to}], gone: [ids], downloaded, files: [{id, file, status}]}`; without `--dir`: `{id, markdown}` (see Export) |
 | `project snapshot` | `{root, projects: [{id, identifier, name, path, parent?, parentId?, status?, statusExplanation?, description?, active, public, createdAt, updatedAt, url, versions: [{id, name, status, startDate?, endDate?, sharing, description?, createdAt, updatedAt}]}]}` (see Projects) |
+| `board list` | `{total, count, items: [{id, name, project, kind, attribute?, columns, createdAt, updatedAt, url}]}` |
+| `board get` | `{id, name, project, kind, attribute?, filters?, url, columns: [{position, name, value?, queryId, widgetId, total, cards: [{id, displayId?, subject, type, status, assignee?, priority?, dueDate?, project?, position?}]}]}` (see Boards) |
+| `board create`, `board update`, `board column …` | the board as `board get`, without `total` and `cards` |
+| `board card move`, `board card add` | `{wp, board, from?, to, changed?, value?, position?}` |
 
 Records are flattened from HAL: a link becomes its title plus an id
 (`"status": "In progress", "statusId": 7`); Markdown fields are plain strings;
@@ -148,7 +152,8 @@ opcli time status -o json                                  # is a timer running?
 
 - `wp list` defaults: open work packages, the configured project (else every
   project), 50 results, most recently updated first. `--max 0` fetches all.
-  Flags combine with AND; `--query-id` ignores the other filters.
+  Flags combine with AND; `--query-id` ignores the other filters; a manually
+  sorted query (a board column) keeps its manual order, every page included.
 - Whether `--project X` also returns its subprojects' work packages depends
   on an instance setting ("display subprojects work packages"), so do not
   rely on it. `--subprojects` always includes every project below X, at any
@@ -510,6 +515,64 @@ opcli meeting update "$MID" --state closed
 - Agenda item and outcome ids come from `meeting get`. A follow-up work
   package is created with `wp create` first, then linked with `outcome add --wp`.
 
+## Boards
+
+```sh
+opcli board list -p demo-project -o json
+opcli board get "Kanban" -p demo-project -o json            # columns left to right, cards in board order
+opcli board get 12 --column "In progress" --max 0 -o json   # one column, every card
+opcli board get 12 --counts                                 # cards per column only
+opcli board create -p demo-project --name "Kanban" --attribute status --columns "New,In progress,Closed"
+opcli board create -p demo-project --name "Ideas" --attribute free --columns "Later,Now"
+opcli board update 12 --name "Team kanban"
+opcli board column add 12 --value "On hold" --position 3    # a status, user, version... of the board's attribute
+opcli board column add "Ideas" -p demo-project --name "Someday"   # a list, in a free board
+opcli board column move 12 --column Closed --position 4
+opcli board column rename "Ideas" --column Later --name Backlog
+opcli board card move 42 --board 12 --to "In progress" --top      # changes the status
+opcli board card move 42 -b 12 --before 57                        # reorder inside its column
+opcli board card add 42 -b "Ideas" -p demo-project --column Now --bottom
+opcli board card remove 42 -b "Ideas" -p demo-project
+```
+
+A board is either **by attribute** (`kind: action`; `attribute` is status,
+assignee, version, subproject or subtasks): each column is one value of that
+field, its `value` the value's id, and a card sits in the column of its
+value; or **free** (`kind: free`): columns are lists you fill by hand. A
+board is found by id or name (`--project` narrows the name search; partial
+names work when unambiguous); a column by name or position (1 = leftmost).
+
+- `board get` lists each column's cards in board order: those placed by hand
+  first (`position`), then the rest by id, as the web shows them. Every card
+  is read to order it; `--max` (default 50, `0` = all) only caps the list,
+  `total` counts them all. `filters` are board-wide filters, on top of each
+  column's. `project` appears on a card only when it is not the board's.
+- **`board card move`** is dragging a card. In a board by attribute, `--to`
+  another column changes the field to the column's value through `wp
+  update`, with the same server-side validation: a status the workflow does
+  not allow fails listing the allowed ones, so check `wp allowed <id> --field
+  status` first; `--notify=false` for quiet changes. In a free board the card
+  leaves its list (`--from` when it is in several) and joins the target;
+  off every list, `--to` just adds it. `--top`, `--bottom`, `--before <id>`
+  or `--after <id>` place it in the target column; without them it lands
+  where the board puts new cards (last). Reordering inside a column needs one
+  of them. JSON: `changed` is the field written and `value` its new id;
+  `position` is the card's place in the column, 1 = top.
+- `board card add` and `board card remove` only work on free boards (in a
+  board by attribute, a card's column is its field). Removing takes the card
+  off the list; the work package is untouched.
+- `board create --attribute` is required: status, assignee, version,
+  subproject, subtasks or free. `--columns` takes values of the attribute
+  (status names, users, version names, subprojects, parent work package ids)
+  or list names. Without it you get what the web creates: the default status,
+  the open versions of the project, one free list, or no columns.
+- Every column has a hidden query of its own, created and deleted with it;
+  its manual order is the card order. If a write fails halfway, opcli deletes
+  the queries it created, and warns with their ids when it cannot.
+- Every write takes `--dry-run`. `board delete` and `board column remove`
+  are destructive (`--yes`): removing a column loses its card order, never
+  the work packages.
+
 ## Projects, versions, members
 
 ```sh
@@ -547,12 +610,12 @@ output is an indented tree.
 ## Anything else: the raw API
 
 opcli embeds the OpenAPI spec of API v3. For what no command covers (wiki
-pages, news, boards, custom actions…):
+pages, news, custom actions…):
 
 ```sh
 opcli api endpoints news                         # find the endpoint
 opcli api describe POST /api/v3/news             # parameters and body fields
-opcli api request GET /api/v3/grids --query pageSize=5 --flatten -o json
+opcli api request GET /api/v3/news --query pageSize=5 --flatten -o json
 opcli api request POST news --body-file news.json
 opcli api describe GET /api/v3/projects --live   # the server's own spec instead
 ```
@@ -606,6 +669,8 @@ opcli meeting agenda delete 37 --yes
 opcli meeting outcome delete 4 --yes
 opcli reminder delete 3 --yes
 opcli project delete old-stuff --yes        # everything in it
+opcli board delete 12 --yes                 # the board and its column queries, not the work packages
+opcli board column remove 12 --column "On hold" --yes
 opcli api request DELETE work_packages/42 --yes
 ```
 
@@ -619,8 +684,9 @@ Say so instead of improvising:
 
 - deleting a comment (the API only allows editing it), changing `createdAt`
   or the author of anything;
-- ordering cards on a board or moving them between board columns other than
-  by changing the field the column is based on (e.g. `--status`);
+- boards by a custom field or other attributes the web may add: `board get`
+  shows them, but `board card move` and `board column add` only handle
+  status, assignee, version, subproject and subtasks;
 - recurring meeting series and meeting sections (reachable with `opcli api
   endpoints meeting`); creating the Google Meet / Teams call itself;
 - creating or editing users, groups, roles, types, statuses, custom field

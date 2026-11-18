@@ -286,23 +286,98 @@ func (e *Env) listWorkPackages(ctx context.Context, a Args, withDescription bool
 	return l, nil
 }
 
+// A manually sorted query (board columns, hand-ordered lists) ignores
+// pageSize and offset: OpenProject serves it as one page of at most the
+// instance's forced page size (250). So it is read sorted by id, which
+// pages, and put back in manual order here (see sortCards).
 func (e *Env) runSavedQuery(ctx context.Context, id int, a Args) (*List, error) {
-	q := url.Values{}
-	max := a.Int("max")
-	if max <= 0 {
-		max = 1000
-	}
-	q.Set("pageSize", strconv.Itoa(max))
-	q.Set("offset", strconv.Itoa(max1(a.Int("page"))))
-	res, err := e.C.Get(ctx, fmt.Sprintf("/queries/%d", id), q)
+	path := fmt.Sprintf("/queries/%d", id)
+	def, err := e.C.Get(ctx, path, url.Values{"pageSize": {"0"}})
 	if err != nil {
 		return nil, err
 	}
-	emb, _ := res["_embedded"].(map[string]any)
-	results, _ := emb["results"].(map[string]any)
-	l := NewList(hal.FlattenAll(client.Elements(results)), intOf(results["total"]))
+	manual := false
+	links, _ := def["_links"].(map[string]any)
+	for _, s := range toMapsAny(links["sortBy"]) {
+		if strings.Contains(hal.String(s["href"]), "/manualSorting-") {
+			manual = true
+		}
+	}
+	max, page := a.Int("max"), a.Int("page")
+	size := max
+	if size <= 0 {
+		size = 100
+	}
+	pageOf := func(offset, n int, byID bool) ([]map[string]any, int, error) {
+		q := url.Values{"pageSize": {strconv.Itoa(n)}, "offset": {strconv.Itoa(offset)}}
+		if byID {
+			q.Set("sortBy", `[["id","asc"]]`)
+		}
+		res, err := e.C.Get(ctx, path, q)
+		if err != nil {
+			return nil, 0, err
+		}
+		emb, _ := res["_embedded"].(map[string]any)
+		results, _ := emb["results"].(map[string]any)
+		return client.Elements(results), intOf(results["total"]), nil
+	}
+	var items []map[string]any
+	total := 0
+	switch {
+	case !manual && page > 0:
+		if items, total, err = pageOf(page, size, false); err != nil {
+			return nil, err
+		}
+	default:
+		// Every page needed, in id order when the order is rebuilt here.
+		want := max
+		if manual || want <= 0 {
+			want = 0
+		}
+		per := client.MaxPageSize
+		if want > 0 {
+			per = min(want, per)
+		}
+		for off := 1; ; off++ {
+			elems, t, err := pageOf(off, per, manual)
+			if err != nil {
+				return nil, err
+			}
+			total = t
+			items = append(items, elems...)
+			if len(elems) < per || len(items) >= total || (want > 0 && len(items) >= want) {
+				break
+			}
+		}
+		if manual {
+			pos, err := e.queryOrder(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+			sortCards(items, pos)
+			if page > 0 {
+				lo := min((page-1)*size, len(items))
+				items = items[lo:min(lo+size, len(items))]
+			}
+		}
+		if page == 0 && max > 0 && len(items) > max {
+			items = items[:max]
+		}
+	}
+	l := NewList(hal.FlattenAll(items), total)
 	e.decorateWPs(ctx, l.Items)
 	return l, nil
+}
+
+func toMapsAny(v any) []map[string]any {
+	raw, _ := v.([]any)
+	out := make([]map[string]any, 0, len(raw))
+	for _, x := range raw {
+		if m, ok := x.(map[string]any); ok {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 // stableSort pages a collection in an order that updates do not change.
